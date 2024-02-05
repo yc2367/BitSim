@@ -203,3 +203,4 @@ def process_signMagnitude_conv(wq_list, w_bitwidth=8, group_size=16, pruned_colu
                     group_q = wq_list[k, c*group_size:(c+1)*group_size, w, h]
                     group_q_new = bitFlip_signMagnitude(group_q, w_bitwidth=w_bitwidth, zero_column_required=pruned_column_num)
                     wq_list_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
+    return wq_list_new
