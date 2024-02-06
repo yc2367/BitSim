@@ -21,29 +21,33 @@ for n, m in model.named_modules():
 
 GROUP_SIZE = 16
 w_bitwidth = 8
-    
+
 def main():
-    pruned_column_num = 5
+    pruned_column_num = 7
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    for i, weight_test in enumerate(weight_list):
+    file = open(f'resnet18_loss_report_{pruned_column_num}_col.txt', 'w')
+
+    for i in range(len(weight_list)):
+        weight_test = weight_list[i]
         print(f'Layer {name_list[i]}')
+        file.writelines(f'Layer {name_list[i]} \n')
         for func in [0, 1]:
             if func == 0:
                 format = 'Sign Magnitude'
                 if len(weight_test.shape) == 4:
                     weight_test_new = process_signMagnitude_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                 pruned_column_num=pruned_column_num)
+                                                                 pruned_column_num=pruned_column_num, device=device)
                 elif len(weight_test.shape) == 2:
                     weight_test_new = process_signMagnitude_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                               pruned_column_num=pruned_column_num)
+                                                               pruned_column_num=pruned_column_num, device=device)
             else:
                 format = '2s Complement'
                 if len(weight_test.shape) == 4:
                     weight_test_new = process_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                  pruned_column_num=pruned_column_num)
+                                                                  pruned_column_num=pruned_column_num, device=device)
                 elif len(weight_test.shape) == 2:
                     weight_test_new = process_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                pruned_column_num=pruned_column_num)
+                                                                pruned_column_num=pruned_column_num, device=device)
             weight_original = weight_test.to(torch.float)
             weight_new = weight_test_new.to(torch.float)
 
@@ -53,7 +57,9 @@ def main():
             loss = criterion(weight_original, weight_new)
             #print(f'{format}: MSE loss between new weight and original weight is {loss}')
             print(f'{format.ljust(15)} MSE: {loss}')
-
+            file.writelines(f'{format.ljust(15)} MSE: {loss} \n')
+        file.writelines('\n')
+    file.close()
 
                     
 if __name__ == "__main__":
