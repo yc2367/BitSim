@@ -19,10 +19,10 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-weight_test = weight_list[15]
+weight_test = weight_list[19]
 GROUP_SIZE = 16
 
-func = 1
+func = 0
 if func == 0:
     convert = lambda t: int_to_sign_magnitude(t, 8)
     file_name = 'resnet18_weight_sign_magnitude.txt'

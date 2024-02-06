@@ -1,6 +1,6 @@
 import torch
 
-def int_to_signMagnitude(weight_q, w_bitwidth=8, cellBit=1):
+def int_to_signMagnitude(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     weight_q = weight_q.clone()
     cellRange = 2**cellBit
     is_min = weight_q.eq(-2**(w_bitwidth-1))
@@ -21,10 +21,10 @@ def int_to_signMagnitude(weight_q, w_bitwidth=8, cellBit=1):
     return remainder_list
 
 
-def signMagnitude_to_int(wqb_list, w_bitwidth=8):
+def signMagnitude_to_int(wqb_list, w_bitwidth=8, device='cpu'):
     bin_list_shape = wqb_list.size()
     wq_list_shape = list(bin_list_shape[1:])
-    wq_list = torch.zeros(wq_list_shape)
+    wq_list = torch.zeros(wq_list_shape, device=device)
 
     for k in reversed(range(int(w_bitwidth))):
         if k != 0:
@@ -35,7 +35,7 @@ def signMagnitude_to_int(wqb_list, w_bitwidth=8):
     return wq_list
 
 
-def int_to_twosComplement(weight_q, w_bitwidth=8, cellBit=1):
+def int_to_twosComplement(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     weight_q = weight_q.clone()
 
     cellRange = 2**cellBit
@@ -55,10 +55,10 @@ def int_to_twosComplement(weight_q, w_bitwidth=8, cellBit=1):
     return remainder_list
 
 
-def twosComplement_to_int(wqb_list, w_bitwidth=8):
+def twosComplement_to_int(wqb_list, w_bitwidth=8, device='cpu'):
     bin_list_shape = wqb_list.size()
     wq_list_shape = list(bin_list_shape[1:])
-    wq_list = torch.zeros(wq_list_shape)
+    wq_list = torch.zeros(wq_list_shape, device=device)
 
     for k in reversed(range(int(w_bitwidth))):
         if k != 0:
@@ -69,7 +69,7 @@ def twosComplement_to_int(wqb_list, w_bitwidth=8):
     return wq_list
 
 
-def int_to_binary(weight_q, w_bitwidth=8, cellBit=1):
+def int_to_binary(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     weight_q = weight_q.clone()
 
     cellRange = 2**cellBit
@@ -85,10 +85,10 @@ def int_to_binary(weight_q, w_bitwidth=8, cellBit=1):
     return remainder_list
 
 
-def binary_to_int(wqb_list, w_bitwidth=8):
+def binary_to_int(wqb_list, w_bitwidth=8, device='cpu'):
     bin_list_shape = wqb_list.size()
     wq_list_shape = list(bin_list_shape[1:])
-    wq_list = torch.zeros(wq_list_shape)
+    wq_list = torch.zeros(wq_list_shape, device=device)
 
     for k in reversed(range(int(w_bitwidth))):
         wq_list += (wqb_list[k] * 2**(w_bitwidth-1-k))
@@ -133,12 +133,12 @@ def take_twosComplement(wqb_list, w_bitwidth=8, cellbit=1):
     return new_wqb_list
 
 
-def bitFlip_signMagnitude(group_q, w_bitwidth=8, zero_column_required=4, return_binary=False):
+def bitFlip_signMagnitude(group_q, w_bitwidth=8, zero_column_required=4, return_binary=False, device='cpu'):
     '''
     Apply bit-flip to a group of quantized weights in sign-magnitude format
     '''
-    group_q = group_q
-    group_binary = int_to_signMagnitude(group_q, w_bitwidth=w_bitwidth)
+    group_q = group_q.to(device)
+    group_binary = int_to_signMagnitude(group_q, w_bitwidth=w_bitwidth, device=device)
     # check existing zero columns
     zero_column_idx = [1e3]
     for i in range(1, int(w_bitwidth)):
@@ -171,8 +171,8 @@ def bitFlip_signMagnitude(group_q, w_bitwidth=8, zero_column_required=4, return_
     # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
     # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
     column_test = group_binary[test_until:]
-    column_test = column_test
-    int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until)
+    column_test = column_test.to(device)
+    int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until, device=device)
     #print(prune_until, test_until)
     int_test_new = torch.zeros_like(int_test)
 
@@ -191,10 +191,10 @@ def bitFlip_signMagnitude(group_q, w_bitwidth=8, zero_column_required=4, return_
 
         int_test_new[i] = new_value
 
-    column_test_new = int_to_binary(int_test_new,
+    column_test_new = int_to_binary(int_test_new, device=device,
                                     w_bitwidth=w_bitwidth-test_until)
     group_binary[test_until:] = column_test_new
-    group_int_new = signMagnitude_to_int(group_binary,
+    group_int_new = signMagnitude_to_int(group_binary, device=device,
                                          w_bitwidth=w_bitwidth)
 
     if return_binary:
@@ -203,11 +203,11 @@ def bitFlip_signMagnitude(group_q, w_bitwidth=8, zero_column_required=4, return_
         return group_int_new
 
 
-def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return_binary=False):
+def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return_binary=False, device='cpu'):
     '''
     Apply bit-flip to a group of quantized weights in 2's complement format
     '''
-    group_q = group_q
+    group_q = group_q.to(device)
     group_binary = int_to_twosComplement(group_q, w_bitwidth=w_bitwidth)
     # check existing zero columns
     zero_column_idx = [1e3]
@@ -236,8 +236,8 @@ def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return
     # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
     # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
     if prune_until == 1:
-        group_binary = group_binary
-        int_test = twosComplement_to_int(group_binary,
+        group_binary = group_binary.to(device)
+        int_test = twosComplement_to_int(group_binary, device=device,
                                          w_bitwidth=w_bitwidth)
         int_test_new = torch.zeros_like(int_test)
         error = 1e7
@@ -251,14 +251,14 @@ def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return
         group_int_new = int_test_new
     else:
         column_test = group_binary[prune_until:]
-        column_test = column_test
-        int_test = binary_to_int(column_test,
+        column_test = column_test.to(device)
+        int_test = binary_to_int(column_test, device=device,
                                  w_bitwidth=w_bitwidth-prune_until)
         int_test_new = torch.zeros_like(int_test)
         error = 1e7
         for value in range(2**(w_bitwidth-prune_until)):
             tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            tmp_tensor = tmp_tensor
+            tmp_tensor = tmp_tensor.to(device)
             new_error = torch.sum((tmp_tensor - int_test)**2)
             #print('new error', new_error)
             if new_error < error:
@@ -268,7 +268,7 @@ def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return
                 int_test_new = tmp_tensor
         column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-prune_until)
         group_binary[prune_until:] = column_test_new
-        group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+        group_int_new = twosComplement_to_int(group_binary, device=device, w_bitwidth=w_bitwidth)
 
     if return_binary:
         return group_binary
@@ -276,8 +276,8 @@ def bitFlip_twosComplement(group_q, w_bitwidth=8, zero_column_required=4, return
         return group_int_new
     
 
-def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4):
-    wq_int_new = torch.zeros_like(wq_int)
+def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wq_int_new = torch.zeros_like(wq_int, device=device)
     K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
 
     for k in range(K):  # output channel
@@ -285,27 +285,27 @@ def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colum
             for h in range(H):  # kernel height
                 for c in range(C // group_size):  # input channel 
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
-                    group_q_new = bitFlip_signMagnitude(group_q, w_bitwidth=w_bitwidth,
+                    group_q_new = bitFlip_signMagnitude(group_q, w_bitwidth=w_bitwidth, device=device,
                                                         zero_column_required=pruned_column_num)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
 
-def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4):
-    wq_int_new = torch.zeros_like(wq_int)
+def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wq_int_new = torch.zeros_like(wq_int, device=device)
     K, C = wq_int.shape # output channel, input channel
 
     for k in range(K):  # output channel
         for c in range(C // group_size):  # input channel 
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
-            group_q_new = bitFlip_signMagnitude(group_q, w_bitwidth=w_bitwidth,
+            group_q_new = bitFlip_signMagnitude(group_q, w_bitwidth=w_bitwidth, device=device,
                                                 zero_column_required=pruned_column_num)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
 
 
-def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4):
-    wq_int_new = torch.zeros_like(wq_int)
+def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wq_int_new = torch.zeros_like(wq_int, device=device)
     K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
 
     for k in range(K):  # output channel
@@ -313,20 +313,20 @@ def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colu
             for h in range(H):  # kernel height
                 for c in range(C // group_size):  # input channel 
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
-                    group_q_new = bitFlip_twosComplement(group_q, w_bitwidth=w_bitwidth,
+                    group_q_new = bitFlip_twosComplement(group_q, w_bitwidth=w_bitwidth, device=device,
                                                          zero_column_required=pruned_column_num)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
 
-def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4):
-    wq_int_new = torch.zeros_like(wq_int)
+def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wq_int_new = torch.zeros_like(wq_int, device=device)
     K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
 
     for k in range(K):  # output channel
         for c in range(C // group_size):  # input channel 
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
-            group_q_new = bitFlip_twosComplement(group_q, w_bitwidth=w_bitwidth,
+            group_q_new = bitFlip_twosComplement(group_q, w_bitwidth=w_bitwidth, device=device,
                                                  zero_column_required=pruned_column_num)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
