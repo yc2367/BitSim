@@ -23,7 +23,7 @@ GROUP_SIZE = 16
 w_bitwidth = 8
 
 def main():
-    pruned_column_num = 6
+    pruned_column_num = 5
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     file = open(f'resnet50_loss_report_{pruned_column_num}_col.txt', 'w')
 

@@ -28,7 +28,7 @@ def signMagnitude_to_int(wqb_list, w_bitwidth=8):
 
     for k in reversed(range(int(w_bitwidth))):
         if k != 0:
-          wq_list += (wqb_list[k] * 2**(w_bitwidth-1-k))
+          wq_list += (wqb_list[k] * 2.**(w_bitwidth-1-k))
         else:
           ones  = wqb_list[k].eq(1.)
           wq_list[ones] = -wq_list[ones]
@@ -91,7 +91,8 @@ def binary_to_int(wqb_list, w_bitwidth=8):
     wq_list = torch.zeros(wq_list_shape)
 
     for k in reversed(range(int(w_bitwidth))):
-        wq_list += (wqb_list[k] * 2**(w_bitwidth-1-k))
+        wq_list += (wqb_list[k] * 2.**(w_bitwidth-1-k))
+    
     return wq_list
 
 
@@ -116,7 +117,6 @@ def take_twosComplement(wqb_list, w_bitwidth=8, cellbit=1):
 
     for k in range(int(w_bitwidth/cellbit)):
         wqb    = wqb_list[k]
-        
         is_one = ones[k]
         is_zrs = zeros[k]
         
@@ -178,7 +178,7 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
         new_value = 0
         error = 1e7
         for n in range(2**(prune_until-test_until)):
-            tmp_value = n * 2**(w_bitwidth-prune_until)
+            tmp_value = n * 2.**(w_bitwidth-prune_until)
             new_error = ((tmp_value - value)**2)
             #print('new error', new_error)
             if new_error < error:
@@ -209,6 +209,21 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     for i in range(1, int(w_bitwidth)):
         if torch.equal(group_binary[i], group_binary[0]):
             zero_column_idx.append(i)
+        else:
+            break
+    
+    '''
+        tmp_idx: the next column after the sign column 
+        if the hamming distance between column tmp_idx and column 0 is small 
+        we can use a special unit to calculate column tmp_idx 
+    '''
+    if (zero_column_idx[-1] < w_bitwidth):
+        tmp_idx = zero_column_idx[-1] + 1
+    else:
+        tmp_idx = 1
+    hamming_distance = torch.sum(torch.abs(group_binary[tmp_idx] - group_binary[0]))
+    if hamming_distance < 2.5:
+        zero_column_idx.append(tmp_idx)
     
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -231,7 +246,7 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
     # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
     if prune_until == 1:
-        int_test = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+        int_test = group_q
         int_test_new = torch.zeros_like(int_test)
         error = 1e7
         for value in range(-2**(w_bitwidth-2), 2**(w_bitwidth-2)):
@@ -242,9 +257,6 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
                 error = new_error
                 int_test_new = tmp_tensor
         group_int_new = int_test_new
-        print('a', int_test)
-        print('b', group_q)
-        print('c', group_int_new)
     else:
         column_test = group_binary[prune_until:]
         int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-prune_until)
