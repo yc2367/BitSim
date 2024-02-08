@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 import numpy as np
-from util_old import *
+from util_profile import *
 
 from torchvision.models.quantization import ResNet50_QuantizedWeights
 model = torchvision.models.quantization.resnet50(weights = ResNet50_QuantizedWeights, quantize=True)

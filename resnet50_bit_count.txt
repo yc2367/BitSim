@@ -1,0 +1,274 @@
+Layer conv1 
+Baseline skip 0       Sparse bit count: 38801 
+Proposed skip 1 or 0  Sparse bit count: 58608 
+Layer bit count: 75264 
+
+Layer layer1.0.conv1 
+Baseline skip 0       Sparse bit count: 18871 
+Proposed skip 1 or 0  Sparse bit count: 20873 
+Layer bit count: 32768 
+
+Layer layer1.0.conv2 
+Baseline skip 0       Sparse bit count: 166714 
+Proposed skip 1 or 0  Sparse bit count: 184430 
+Layer bit count: 294912 
+
+Layer layer1.0.conv3 
+Baseline skip 0       Sparse bit count: 74375 
+Proposed skip 1 or 0  Sparse bit count: 83223 
+Layer bit count: 131072 
+
+Layer layer1.0.downsample.0 
+Baseline skip 0       Sparse bit count: 72973 
+Proposed skip 1 or 0  Sparse bit count: 83489 
+Layer bit count: 131072 
+
+Layer layer1.1.conv1 
+Baseline skip 0       Sparse bit count: 75852 
+Proposed skip 1 or 0  Sparse bit count: 82658 
+Layer bit count: 131072 
+
+Layer layer1.1.conv2 
+Baseline skip 0       Sparse bit count: 156662 
+Proposed skip 1 or 0  Sparse bit count: 177330 
+Layer bit count: 294912 
+
+Layer layer1.1.conv3 
+Baseline skip 0       Sparse bit count: 66954 
+Proposed skip 1 or 0  Sparse bit count: 79584 
+Layer bit count: 131072 
+
+Layer layer1.2.conv1 
+Baseline skip 0       Sparse bit count: 68209 
+Proposed skip 1 or 0  Sparse bit count: 78773 
+Layer bit count: 131072 
+
+Layer layer1.2.conv2 
+Baseline skip 0       Sparse bit count: 146849 
+Proposed skip 1 or 0  Sparse bit count: 176971 
+Layer bit count: 294912 
+
+Layer layer1.2.conv3 
+Baseline skip 0       Sparse bit count: 65051 
+Proposed skip 1 or 0  Sparse bit count: 78643 
+Layer bit count: 131072 
+
+Layer layer2.0.conv1 
+Baseline skip 0       Sparse bit count: 130423 
+Proposed skip 1 or 0  Sparse bit count: 157289 
+Layer bit count: 262144 
+
+Layer layer2.0.conv2 
+Baseline skip 0       Sparse bit count: 588755 
+Proposed skip 1 or 0  Sparse bit count: 707337 
+Layer bit count: 1179648 
+
+Layer layer2.0.conv3 
+Baseline skip 0       Sparse bit count: 286826 
+Proposed skip 1 or 0  Sparse bit count: 335342 
+Layer bit count: 524288 
+
+Layer layer2.0.downsample.0 
+Baseline skip 0       Sparse bit count: 574654 
+Proposed skip 1 or 0  Sparse bit count: 668880 
+Layer bit count: 1048576 
+
+Layer layer2.1.conv1 
+Baseline skip 0       Sparse bit count: 291422 
+Proposed skip 1 or 0  Sparse bit count: 317830 
+Layer bit count: 524288 
+
+Layer layer2.1.conv2 
+Baseline skip 0       Sparse bit count: 585137 
+Proposed skip 1 or 0  Sparse bit count: 717447 
+Layer bit count: 1179648 
+
+Layer layer2.1.conv3 
+Baseline skip 0       Sparse bit count: 263622 
+Proposed skip 1 or 0  Sparse bit count: 314946 
+Layer bit count: 524288 
+
+Layer layer2.2.conv1 
+Baseline skip 0       Sparse bit count: 262791 
+Proposed skip 1 or 0  Sparse bit count: 314259 
+Layer bit count: 524288 
+
+Layer layer2.2.conv2 
+Baseline skip 0       Sparse bit count: 590400 
+Proposed skip 1 or 0  Sparse bit count: 708466 
+Layer bit count: 1179648 
+
+Layer layer2.2.conv3 
+Baseline skip 0       Sparse bit count: 261732 
+Proposed skip 1 or 0  Sparse bit count: 314156 
+Layer bit count: 524288 
+
+Layer layer2.3.conv1 
+Baseline skip 0       Sparse bit count: 258231 
+Proposed skip 1 or 0  Sparse bit count: 313417 
+Layer bit count: 524288 
+
+Layer layer2.3.conv2 
+Baseline skip 0       Sparse bit count: 584002 
+Proposed skip 1 or 0  Sparse bit count: 706502 
+Layer bit count: 1179648 
+
+Layer layer2.3.conv3 
+Baseline skip 0       Sparse bit count: 258337 
+Proposed skip 1 or 0  Sparse bit count: 314345 
+Layer bit count: 524288 
+
+Layer layer3.0.conv1 
+Baseline skip 0       Sparse bit count: 515467 
+Proposed skip 1 or 0  Sparse bit count: 627843 
+Layer bit count: 1048576 
+
+Layer layer3.0.conv2 
+Baseline skip 0       Sparse bit count: 2358002 
+Proposed skip 1 or 0  Sparse bit count: 2828480 
+Layer bit count: 4718592 
+
+Layer layer3.0.conv3 
+Baseline skip 0       Sparse bit count: 1061048 
+Proposed skip 1 or 0  Sparse bit count: 1275218 
+Layer bit count: 2097152 
+
+Layer layer3.0.downsample.0 
+Baseline skip 0       Sparse bit count: 2139407 
+Proposed skip 1 or 0  Sparse bit count: 2547609 
+Layer bit count: 4194304 
+
+Layer layer3.1.conv1 
+Baseline skip 0       Sparse bit count: 1070917 
+Proposed skip 1 or 0  Sparse bit count: 1258031 
+Layer bit count: 2097152 
+
+Layer layer3.1.conv2 
+Baseline skip 0       Sparse bit count: 2344947 
+Proposed skip 1 or 0  Sparse bit count: 2834187 
+Layer bit count: 4718592 
+
+Layer layer3.1.conv3 
+Baseline skip 0       Sparse bit count: 1044646 
+Proposed skip 1 or 0  Sparse bit count: 1259832 
+Layer bit count: 2097152 
+
+Layer layer3.2.conv1 
+Baseline skip 0       Sparse bit count: 1037761 
+Proposed skip 1 or 0  Sparse bit count: 1256373 
+Layer bit count: 2097152 
+
+Layer layer3.2.conv2 
+Baseline skip 0       Sparse bit count: 2325797 
+Proposed skip 1 or 0  Sparse bit count: 2830153 
+Layer bit count: 4718592 
+
+Layer layer3.2.conv3 
+Baseline skip 0       Sparse bit count: 1034371 
+Proposed skip 1 or 0  Sparse bit count: 1258139 
+Layer bit count: 2097152 
+
+Layer layer3.3.conv1 
+Baseline skip 0       Sparse bit count: 1024346 
+Proposed skip 1 or 0  Sparse bit count: 1258430 
+Layer bit count: 2097152 
+
+Layer layer3.3.conv2 
+Baseline skip 0       Sparse bit count: 2315771 
+Proposed skip 1 or 0  Sparse bit count: 2830583 
+Layer bit count: 4718592 
+
+Layer layer3.3.conv3 
+Baseline skip 0       Sparse bit count: 1029791 
+Proposed skip 1 or 0  Sparse bit count: 1257101 
+Layer bit count: 2097152 
+
+Layer layer3.4.conv1 
+Baseline skip 0       Sparse bit count: 1020881 
+Proposed skip 1 or 0  Sparse bit count: 1257771 
+Layer bit count: 2097152 
+
+Layer layer3.4.conv2 
+Baseline skip 0       Sparse bit count: 2302147 
+Proposed skip 1 or 0  Sparse bit count: 2833121 
+Layer bit count: 4718592 
+
+Layer layer3.4.conv3 
+Baseline skip 0       Sparse bit count: 1025283 
+Proposed skip 1 or 0  Sparse bit count: 1259153 
+Layer bit count: 2097152 
+
+Layer layer3.5.conv1 
+Baseline skip 0       Sparse bit count: 1020255 
+Proposed skip 1 or 0  Sparse bit count: 1258331 
+Layer bit count: 2097152 
+
+Layer layer3.5.conv2 
+Baseline skip 0       Sparse bit count: 2300860 
+Proposed skip 1 or 0  Sparse bit count: 2832796 
+Layer bit count: 4718592 
+
+Layer layer3.5.conv3 
+Baseline skip 0       Sparse bit count: 1021441 
+Proposed skip 1 or 0  Sparse bit count: 1260665 
+Layer bit count: 2097152 
+
+Layer layer4.0.conv1 
+Baseline skip 0       Sparse bit count: 2039021 
+Proposed skip 1 or 0  Sparse bit count: 2516445 
+Layer bit count: 4194304 
+
+Layer layer4.0.conv2 
+Baseline skip 0       Sparse bit count: 9266696 
+Proposed skip 1 or 0  Sparse bit count: 11309136 
+Layer bit count: 18874368 
+
+Layer layer4.0.conv3 
+Baseline skip 0       Sparse bit count: 4074318 
+Proposed skip 1 or 0  Sparse bit count: 5037376 
+Layer bit count: 8388608 
+
+Layer layer4.0.downsample.0 
+Baseline skip 0       Sparse bit count: 8276931 
+Proposed skip 1 or 0  Sparse bit count: 10043929 
+Layer bit count: 16777216 
+
+Layer layer4.1.conv1 
+Baseline skip 0       Sparse bit count: 4052922 
+Proposed skip 1 or 0  Sparse bit count: 5040184 
+Layer bit count: 8388608 
+
+Layer layer4.1.conv2 
+Baseline skip 0       Sparse bit count: 9244951 
+Proposed skip 1 or 0  Sparse bit count: 11316085 
+Layer bit count: 18874368 
+
+Layer layer4.1.conv3 
+Baseline skip 0       Sparse bit count: 4116010 
+Proposed skip 1 or 0  Sparse bit count: 5024518 
+Layer bit count: 8388608 
+
+Layer layer4.2.conv1 
+Baseline skip 0       Sparse bit count: 4112882 
+Proposed skip 1 or 0  Sparse bit count: 5028082 
+Layer bit count: 8388608 
+
+Layer layer4.2.conv2 
+Baseline skip 0       Sparse bit count: 9266008 
+Proposed skip 1 or 0  Sparse bit count: 11309840 
+Layer bit count: 18874368 
+
+Layer layer4.2.conv3 
+Baseline skip 0       Sparse bit count: 4054831 
+Proposed skip 1 or 0  Sparse bit count: 5033353 
+Layer bit count: 8388608 
+
+Layer fc 
+Baseline skip 0       Sparse bit count: 7384865 
+Proposed skip 1 or 0  Sparse bit count: 10046763 
+Layer bit count: 16384000 
+
+Baseline skip 0       Total sparse bit count: 99770216 
+Proposed skip 1 or 0  Total sparse bit count: 122724325 
+Model total bit count: 204023296 
+

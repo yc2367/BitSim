@@ -222,7 +222,7 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     else:
         tmp_idx = 1
     hamming_distance = torch.sum(torch.abs(group_binary[tmp_idx] - group_binary[0]))
-    if hamming_distance < 2.5:
+    if hamming_distance < 1.5:
         zero_column_idx.append(tmp_idx)
     
     # prune_until is a pointer to specify which column to prune until
@@ -246,39 +246,64 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
     # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
     if prune_until == 1:
-        group_binary = group_binary
-        int_test = twosComplement_to_int(group_binary,
-                                         w_bitwidth=w_bitwidth)
-        int_test_new = torch.zeros_like(int_test)
+        int_test_avg = group_q
+        int_test_avg_new = torch.zeros_like(int_test_avg)
         error = 1e7
         for value in range(-2**(w_bitwidth-2), 2**(w_bitwidth-2)):
             tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            new_error = torch.sum((tmp_tensor - int_test)**2)
+            new_error = torch.sum((tmp_tensor - int_test_avg)**2)
             #print('new error', new_error)
             if new_error < error:
                 error = new_error
-                int_test_new = tmp_tensor
-        group_int_new = int_test_new
+                int_test_avg_new = tmp_tensor
+        group_int_new = int_test_avg_new
     else:
-        column_test = group_binary[prune_until:]
-        column_test = column_test
-        int_test = binary_to_int(column_test,
-                                 w_bitwidth=w_bitwidth-prune_until)
-        int_test_new = torch.zeros_like(int_test)
+        column_test_avg = group_binary[prune_until:]
+        int_test_avg = binary_to_int(column_test_avg, w_bitwidth=w_bitwidth-prune_until)
+        int_test_avg_new = torch.zeros_like(int_test_avg)
         error = 1e7
         for value in range(2**(w_bitwidth-prune_until)):
             tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            tmp_tensor = tmp_tensor
-            new_error = torch.sum((tmp_tensor - int_test)**2)
+            new_error = torch.sum((tmp_tensor - int_test_avg)**2)
             #print('new error', new_error)
             if new_error < error:
                 #print(tmp_value)
                 error = new_error
                 #print(error)
-                int_test_new = tmp_tensor
-        column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-prune_until)
-        group_binary[prune_until:] = column_test_new
-        group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+                int_test_avg_new = tmp_tensor
+
+        zero_column_idx = [idx if idx < prune_until else 0 for idx in zero_column_idx]
+        test_until = max(zero_column_idx) + 1
+        # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+        # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+        column_test_flip = group_binary[test_until:]
+        int_test_flip = binary_to_int(column_test_flip, w_bitwidth=w_bitwidth-test_until)
+        #print(prune_until, test_until)
+        int_test_flip_new = torch.zeros_like(int_test_flip)
+        for i, value in enumerate(int_test_flip.tolist()):
+            new_value = 0
+            error = 1e7
+            for n in range(2**(prune_until-test_until)):
+                tmp_value = n * 2.**(w_bitwidth-prune_until)
+                new_error = ((tmp_value - value)**2)
+                #print('new error', new_error)
+                if new_error < error:
+                    #print(tmp_value)
+                    error = new_error
+                    #print(error)
+                    new_value = tmp_value
+            int_test_flip_new[i] = new_value
+
+        error_avg = torch.sum((int_test_avg_new - int_test_avg)**2)
+        error_flip = torch.sum((int_test_flip_new - int_test_flip)**2)
+        if error_flip < error_avg:
+            column_test_new = int_to_binary(int_test_avg_new, w_bitwidth=w_bitwidth-prune_until)
+            group_binary[prune_until:] = column_test_new
+            group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+        else:
+            column_test_new = int_to_binary(int_test_avg_new, w_bitwidth=w_bitwidth-prune_until)
+            group_binary[prune_until:] = column_test_new
+            group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
 
     if return_binary:
         return group_binary
@@ -291,9 +316,6 @@ def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colum
     wqb_signMagnitude = wqb_signMagnitude.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
     K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-
     for k in range(K):  # output channel
         for w in range(W):  # kernel width
             for h in range(H):  # kernel height
@@ -311,8 +333,6 @@ def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_
     wqb_signMagnitude = wqb_signMagnitude.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
     K, C = wq_int.shape # output channel, input channel
-    if C < group_size:
-        group_size = C
 
     for k in range(K):  # output channel
         for c in range(C // group_size):  # input channel 
@@ -329,8 +349,6 @@ def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colu
     wqb_twosComplement = wqb_twosComplement.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
     K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
 
     for k in range(K):  # output channel
         for w in range(W):  # kernel width
@@ -349,8 +367,6 @@ def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column
     wqb_twosComplement = wqb_twosComplement.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
     K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
 
     for k in range(K):  # output channel
         for c in range(C // group_size):  # input channel 
@@ -360,80 +376,3 @@ def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column
                                                  zero_column_required=pruned_column_num)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
-
-
-def count_zero_bit_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
-    wqb_twosComplement = wqb_twosComplement.to(device)
-    sparse_bit_count = 0
-    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-
-    for k in range(K):  # output channel
-        for w in range(W):  # kernel width
-            for h in range(H):  # kernel height
-                for c in range(C // group_size):  # input channel 
-                    group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size, w, h]
-                    sparse_bit_count += (w_bitwidth*group_size - torch.sum(group_qb))
-    total_bit_count = K * C * W * H * w_bitwidth
-    return sparse_bit_count, total_bit_count
-
-
-def count_zero_bit_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
-    wqb_twosComplement = wqb_twosComplement.to(device)
-    sparse_bit_count = 0
-    K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-
-    for k in range(K):  # output channel
-        for c in range(C // group_size):  # input channel 
-            group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size]            
-            sparse_bit_count += (w_bitwidth*group_size - torch.sum(group_qb))
-    total_bit_count = K * C * w_bitwidth
-    return sparse_bit_count, total_bit_count
-
-
-def count_less_bit_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
-    wqb_twosComplement = wqb_twosComplement.to(device)
-    sparse_bit_count = 0
-    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-
-    for k in range(K):  # output channel
-        for w in range(W):  # kernel width
-            for h in range(H):  # kernel height
-                for c in range(C // group_size):  # input channel 
-                    group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size, w, h]
-                    bit_one_count = torch.sum(group_qb, dim=1)
-                    #print('a', bit_one_count)
-                    skip_zero = bit_one_count.lt(group_size/2)
-                    #print('b', skip_zero)
-                    bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
-                    #print('c', bit_one_count)
-                    sparse_bit_count += torch.sum(bit_one_count)
-    total_bit_count = K * C * W * H * w_bitwidth
-    return sparse_bit_count, total_bit_count
-
-
-def count_less_bit_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
-    wqb_twosComplement = wqb_twosComplement.to(device)
-    sparse_bit_count = 0
-    K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-
-    for k in range(K):  # output channel
-        for c in range(C // group_size):  # input channel 
-            group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size] 
-            bit_one_count = torch.sum(group_qb, dim=1)
-            skip_zero = bit_one_count.lt(group_size/2)
-            bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
-            sparse_bit_count += torch.sum(bit_one_count)
-    total_bit_count = K * C * w_bitwidth
-    return sparse_bit_count, total_bit_count

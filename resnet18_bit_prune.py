@@ -24,7 +24,7 @@ w_bitwidth = 8
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    for N in range(2, 6):
+    for N in range(1, 6):
         pruned_column_num = N
         file = open(f'resnet18_loss_report_{pruned_column_num}_col.txt', 'w')
 
