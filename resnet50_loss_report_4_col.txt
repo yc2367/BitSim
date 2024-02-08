@@ -1,0 +1,56 @@
+Layer layer3.5.conv1 
+Sign Magnitude  MSE: 10.039825439453125 
+2s Complement   MSE: 5.115665435791016 
+
+Layer layer3.5.conv2 
+Sign Magnitude  MSE: 9.24258804321289 
+2s Complement   MSE: 4.833926677703857 
+
+Layer layer3.5.conv3 
+Sign Magnitude  MSE: 16.90018081665039 
+2s Complement   MSE: 10.13528060913086 
+
+Layer layer4.0.conv1 
+Sign Magnitude  MSE: 11.663225173950195 
+2s Complement   MSE: 6.117393493652344 
+
+Layer layer4.0.conv2 
+Sign Magnitude  MSE: 10.265018463134766 
+2s Complement   MSE: 5.551974773406982 
+
+Layer layer4.0.conv3 
+Sign Magnitude  MSE: 12.709623336791992 
+2s Complement   MSE: 6.751407623291016 
+
+Layer layer4.0.downsample.0 
+Sign Magnitude  MSE: 11.47370719909668 
+2s Complement   MSE: 6.0417070388793945 
+
+Layer layer4.1.conv1 
+Sign Magnitude  MSE: 10.009746551513672 
+2s Complement   MSE: 5.18508243560791 
+
+Layer layer4.1.conv2 
+Sign Magnitude  MSE: 12.428176879882812 
+2s Complement   MSE: 6.707187175750732 
+
+Layer layer4.1.conv3 
+Sign Magnitude  MSE: 14.246234893798828 
+2s Complement   MSE: 7.866818428039551 
+
+Layer layer4.2.conv1 
+Sign Magnitude  MSE: 10.855463027954102 
+2s Complement   MSE: 5.640247344970703 
+
+Layer layer4.2.conv2 
+Sign Magnitude  MSE: 12.482410430908203 
+2s Complement   MSE: 6.818645477294922 
+
+Layer layer4.2.conv3 
+Sign Magnitude  MSE: 10.941121101379395 
+2s Complement   MSE: 5.516064643859863 
+
+Layer fc 
+Sign Magnitude  MSE: 5.139593124389648 
+2s Complement   MSE: 2.29941463470459 
+

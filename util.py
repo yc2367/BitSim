@@ -222,7 +222,7 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     else:
         tmp_idx = 1
     hamming_distance = torch.sum(torch.abs(group_binary[tmp_idx] - group_binary[0]))
-    if hamming_distance < 2.5:
+    if hamming_distance < 1.5:
         zero_column_idx.append(tmp_idx)
     
     # prune_until is a pointer to specify which column to prune until

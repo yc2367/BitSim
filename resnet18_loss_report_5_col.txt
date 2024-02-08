@@ -4,39 +4,81 @@ Sign Magnitude  MSE: 1393.71435546875
 
 Layer layer1.0.conv1 
 Sign Magnitude  MSE: 23.89089584350586 
-2s Complement   MSE: 10.720974922180176 
+2s Complement   MSE: 15.88302993774414 
 
 Layer layer1.0.conv2 
 Sign Magnitude  MSE: 41.20960998535156 
-2s Complement   MSE: 16.03230857849121 
+2s Complement   MSE: 22.269287109375 
 
 Layer layer1.1.conv1 
 Sign Magnitude  MSE: 39.967041015625 
-2s Complement   MSE: 14.708197593688965 
+2s Complement   MSE: 20.80178451538086 
 
 Layer layer1.1.conv2 
 Sign Magnitude  MSE: 51.41970443725586 
-2s Complement   MSE: 17.96511459350586 
+2s Complement   MSE: 27.05381965637207 
 
 Layer layer2.0.conv1 
 Sign Magnitude  MSE: 44.8626594543457 
-2s Complement   MSE: 16.25984764099121 
+2s Complement   MSE: 23.89588737487793 
 
 Layer layer2.0.conv2 
 Sign Magnitude  MSE: 31.78829002380371 
-2s Complement   MSE: 11.620930671691895 
+2s Complement   MSE: 16.44240951538086 
 
 Layer layer2.0.downsample.0 
 Sign Magnitude  MSE: 83.995849609375 
-2s Complement   MSE: 32.6591796875 
+2s Complement   MSE: 47.03466796875 
 
 Layer layer2.1.conv1 
 Sign Magnitude  MSE: 32.58967590332031 
-2s Complement   MSE: 11.560173988342285 
+2s Complement   MSE: 16.46539306640625 
 
 Layer layer2.1.conv2 
 Sign Magnitude  MSE: 42.69475555419922 
-2s Complement   MSE: 15.678032875061035 
+2s Complement   MSE: 22.16563606262207 
 
 Layer layer3.0.conv1 
 Sign Magnitude  MSE: 38.21940612792969 
+2s Complement   MSE: 19.399065017700195 
+
+Layer layer3.0.conv2 
+Sign Magnitude  MSE: 29.58986473083496 
+2s Complement   MSE: 15.322935104370117 
+
+Layer layer3.0.downsample.0 
+Sign Magnitude  MSE: 72.57879638671875 
+2s Complement   MSE: 40.340576171875 
+
+Layer layer3.1.conv1 
+Sign Magnitude  MSE: 33.29736328125 
+2s Complement   MSE: 16.993879318237305 
+
+Layer layer3.1.conv2 
+Sign Magnitude  MSE: 41.45857620239258 
+2s Complement   MSE: 21.519567489624023 
+
+Layer layer4.0.conv1 
+Sign Magnitude  MSE: 39.2178955078125 
+2s Complement   MSE: 20.80649757385254 
+
+Layer layer4.0.conv2 
+Sign Magnitude  MSE: 30.58884048461914 
+2s Complement   MSE: 16.353044509887695 
+
+Layer layer4.0.downsample.0 
+Sign Magnitude  MSE: 64.46305084228516 
+2s Complement   MSE: 35.287635803222656 
+
+Layer layer4.1.conv1 
+Sign Magnitude  MSE: 38.873199462890625 
+2s Complement   MSE: 20.839529037475586 
+
+Layer layer4.1.conv2 
+Sign Magnitude  MSE: 33.87741470336914 
+2s Complement   MSE: 17.078645706176758 
+
+Layer fc 
+Sign Magnitude  MSE: 44.382469177246094 
+2s Complement   MSE: 20.35007667541504 
+

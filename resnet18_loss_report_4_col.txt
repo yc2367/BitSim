@@ -19,4 +19,3 @@ Sign Magnitude  MSE: 12.65842056274414
 2s Complement   MSE: 11.73790168762207 
 
 Layer layer2.0.conv1 
-Sign Magnitude  MSE: 11.13880729675293 

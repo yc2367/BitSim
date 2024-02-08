@@ -1,56 +1,56 @@
 Layer layer3.5.conv1 
 Sign Magnitude  MSE: 40.54400634765625 
-2s Complement   MSE: 14.742279052734375 
+2s Complement   MSE: 20.519241333007812 
 
 Layer layer3.5.conv2 
 Sign Magnitude  MSE: 37.16902542114258 
-2s Complement   MSE: 14.101346015930176 
+2s Complement   MSE: 19.311737060546875 
 
 Layer layer3.5.conv3 
 Sign Magnitude  MSE: 69.01849365234375 
-2s Complement   MSE: 28.394771575927734 
+2s Complement   MSE: 40.66005325317383 
 
 Layer layer4.0.conv1 
 Sign Magnitude  MSE: 47.238834381103516 
-2s Complement   MSE: 17.320709228515625 
+2s Complement   MSE: 24.511844635009766 
 
 Layer layer4.0.conv2 
 Sign Magnitude  MSE: 41.40869903564453 
-2s Complement   MSE: 16.24822425842285 
+2s Complement   MSE: 22.2208251953125 
 
 Layer layer4.0.conv3 
 Sign Magnitude  MSE: 51.62968444824219 
-2s Complement   MSE: 19.116792678833008 
+2s Complement   MSE: 27.059398651123047 
 
 Layer layer4.0.downsample.0 
 Sign Magnitude  MSE: 46.314727783203125 
-2s Complement   MSE: 17.128910064697266 
+2s Complement   MSE: 24.220218658447266 
 
 Layer layer4.1.conv1 
 Sign Magnitude  MSE: 40.33452606201172 
-2s Complement   MSE: 15.370824813842773 
+2s Complement   MSE: 20.76618194580078 
 
 Layer layer4.1.conv2 
 Sign Magnitude  MSE: 50.09489822387695 
-2s Complement   MSE: 19.404855728149414 
+2s Complement   MSE: 26.895151138305664 
 
 Layer layer4.1.conv3 
 Sign Magnitude  MSE: 57.86497497558594 
-2s Complement   MSE: 21.916473388671875 
+2s Complement   MSE: 31.61130714416504 
 
 Layer layer4.2.conv1 
 Sign Magnitude  MSE: 43.837364196777344 
-2s Complement   MSE: 16.683380126953125 
+2s Complement   MSE: 22.666282653808594 
 
 Layer layer4.2.conv2 
 Sign Magnitude  MSE: 50.4188117980957 
-2s Complement   MSE: 19.816699981689453 
+2s Complement   MSE: 27.373605728149414 
 
 Layer layer4.2.conv3 
 Sign Magnitude  MSE: 44.384830474853516 
-2s Complement   MSE: 15.760736465454102 
+2s Complement   MSE: 22.05693244934082 
 
 Layer fc 
 Sign Magnitude  MSE: 20.4003963470459 
-2s Complement   MSE: 6.579052925109863 
+2s Complement   MSE: 9.12226676940918 
 
