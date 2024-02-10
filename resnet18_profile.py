@@ -19,7 +19,7 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-weight_test = weight_list[10]
+weight_test = weight_list[4]
 GROUP_SIZE = 16
 
 func = 1

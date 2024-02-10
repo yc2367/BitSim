@@ -199,7 +199,8 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
         return group_int_new
 
 
-def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required=4, 
+                           return_binary=False, h_distance_target=0):
     '''
     Apply bit-flip to a group of quantized weights in 2's complement format
     '''
@@ -221,10 +222,11 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
         tmp_idx = zero_column_idx[-1] + 1
     else:
         tmp_idx = 1
-    hamming_distance = torch.sum(torch.abs(group_binary[tmp_idx] - group_binary[0]))
-    if hamming_distance < 2.5:
-        zero_column_idx.append(tmp_idx)
-    
+    if tmp_idx < w_bitwidth:
+        hamming_distance = torch.sum(torch.abs(group_binary[tmp_idx] - group_binary[0]))
+        if hamming_distance < h_distance_target:
+            zero_column_idx.append(tmp_idx)
+
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
     # if require 4 zero columns, then we should prune from column 7 until column 4 
@@ -324,7 +326,8 @@ def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_
     return wq_int_new
 
 
-def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, 
+                                device='cpu', h_distance_target=0):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
@@ -339,12 +342,14 @@ def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colu
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
                     group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size, w, h]
                     group_q_new = bitFlip_twosComplement(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                         zero_column_required=pruned_column_num)
+                                                         zero_column_required=pruned_column_num, 
+                                                         h_distance_target=h_distance_target)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
 
-def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, 
+                              device='cpu', h_distance_target=0):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
@@ -357,7 +362,8 @@ def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
             group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size]            
             group_q_new = bitFlip_twosComplement(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                 zero_column_required=pruned_column_num)
+                                                 zero_column_required=pruned_column_num,
+                                                 h_distance_target=h_distance_target)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
 

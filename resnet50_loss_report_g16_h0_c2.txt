@@ -1,0 +1,9 @@
+Layer layer3.5.conv1 
+Sign Magnitude  MSE: 0.744232177734375 
+2s Complement   MSE: 0.6152534484863281 
+
+Layer layer3.5.conv2 
+Sign Magnitude  MSE: 0.6946258544921875 
+2s Complement   MSE: 0.5759395956993103 
+
+Layer layer3.5.conv3 
