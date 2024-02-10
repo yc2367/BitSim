@@ -1,0 +1,30 @@
+`ifndef __p_encoder_8to3_V__
+`define __p_encoder_8to3_V__
+
+module p_encoder_8to3
+(
+    input  logic [7:0]  bitmask,     
+    output logic [2:0]  out,
+    output logic        is_zero
+);
+    assign is_zero = (bitmask == 8'd0) ? 1'b1 : 1'b0;
+
+    always_comb begin
+        casez (bitmask)
+            8'b00000000:  out = 3'b000;
+            8'b00000001:  out = 3'b111;
+            8'b00000010:  out = 3'b110;
+            8'b00000100:  out = 3'b101;
+            8'b00001000:  out = 3'b100;
+            8'b00010000:  out = 3'b011;
+            8'b00100000:  out = 3'b010;
+            8'b01000000:  out = 3'b001;
+            8'b10000000:  out = 3'b000;
+
+            default: out = 3'bxxx;
+        endcase
+    end
+
+endmodule
+
+`endif

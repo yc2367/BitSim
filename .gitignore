@@ -1,1 +1,4 @@
 __pycache__/
+software/*.txt
+hardware/work/*
+hardware/*.log
