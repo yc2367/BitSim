@@ -3,7 +3,7 @@
 
 `include "mux_9to1.v"
 `include "mux_17to1.v"
-
+`include "mac_unit_adder_tree_8_Vert.v"
 
 module pos_neg_select #(
 	parameter DATA_WIDTH = 8
@@ -90,54 +90,45 @@ module mac_unit_16_Vert_2_module
 	input  logic                             is_msb,        // specify if the current column is MSB
 	input  logic                             is_skip_zero [1:0],  // specify if skip bit 0
 	
-	output logic signed [DATA_WIDTH+13:0]    result
+	output logic signed [DATA_WIDTH+16:0]    result
 );
 	genvar i, j;
 
-	logic [DATA_WIDTH-1:0] adder_in  [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
+	logic signed [DATA_WIDTH-1:0]     actin     [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
+	logic signed [DATA_WIDTH-1:0]     adder_in  [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
 	generate
 		for (i=0; i<VEC_LENGTH/8; i=i+1) begin
 			for (j=0; j<VEC_LENGTH/4; j=j+1) begin
 				mux_9to1 #(DATA_WIDTH) mux_act (
-					.vec(act[8*i+7:8*i]), .sel(act_sel[4*i+j]), .out(adder_in[4*i+j])
+					.vec(act[8*i+7:8*i]), .sel(act_sel[4*i+j]), .out(actin[4*i+j])
 				);
 			end
 		end
-	endgenerate
 
-	logic signed [DATA_WIDTH:0]    psum_1            [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+1:0]  psum_actin        [VEC_LENGTH/8-1:0];
-	logic signed [SUM_ACT_WIDTH-2:0] diff_act        [VEC_LENGTH/8-1:0];
-	logic signed [SUM_ACT_WIDTH-2:0] psum_actin_true [VEC_LENGTH/8-1:0];
-	generate
-		for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-			assign psum_1[j] = adder_in[2*j] + adder_in[2*j+1];
-		end
-
-		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			assign psum_actin[j] = psum_1[2*j] + psum_1[2*j+1];
-		end
-	
-		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			assign diff_act[j] = sum_act[j] - psum_actin[j];
-
-			always_comb begin
-				if (is_skip_zero[j]) begin
-					psum_actin_true[j] = psum_actin[j];
-				end else begin
-					psum_actin_true[j] = diff_act[j];
+		for (j=0; j<VEC_LENGTH/2; j=j+1) begin
+			always @(posedge clk) begin
+				if (reset) begin
+					adder_in[j] <= 0;
+				end else if (en) begin
+					adder_in[j] <= actin[j];
 				end
 			end
 		end
 	endgenerate
 
-	logic signed [SUM_ACT_WIDTH-1:0] psum_actin_total;
-	assign psum_actin_total = psum_actin_true[0] + psum_actin_true[1];
+	logic signed [SUM_ACT_WIDTH-2:0]    psum_mux_out  [1:0];
+	mac_unit_adder_tree_8_Vert #(DATA_WIDTH, VEC_LENGTH/4, SUM_ACT_WIDTH-1) adder_tree_1 (
+		.adder_in(adder_in[3:0]), .sum_act(sum_act[0]), .is_msb(is_msb), 
+		.is_skip_zero(is_skip_zero[0]), .result(psum_mux_out[0])
+	);
+	mac_unit_adder_tree_8_Vert #(DATA_WIDTH, VEC_LENGTH/4, SUM_ACT_WIDTH-1) adder_tree_2 (
+		.adder_in(adder_in[7:4]), .sum_act(sum_act[1]), .is_msb(is_msb), 
+		.is_skip_zero(is_skip_zero[1]), .result(psum_mux_out[1])
+	);
 
-	logic signed [SUM_ACT_WIDTH-1:0] psum_shifter_in;
-	pos_neg_select #(SUM_ACT_WIDTH) twos_complement (.in(psum_actin_total), .sign(is_msb), .out(psum_shifter_in));
-
+	logic signed [SUM_ACT_WIDTH-1:0]  psum_shifter_in;
 	logic signed [SUM_ACT_WIDTH+6:0]  psum_shifter_out;
+	assign psum_shifter_in = psum_mux_out[0] + psum_mux_out[1];
 	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH), .OUT_WIDTH(SUM_ACT_WIDTH+7)) shift_psum (
 		.in(psum_shifter_in), .shift_sel(column_idx), .out(psum_shifter_out)
 	);
@@ -158,11 +149,9 @@ module mac_unit_16_Vert_2_module
 		.in(hamming_actin), .shift_sel(column_idx), .out(hamming_actin_shifted)
 	);
 
-	logic signed [SUM_ACT_WIDTH:0]    sum_act_total;
 	logic signed [SUM_ACT_WIDTH+2:0]  mul_result;
 	logic signed [SUM_ACT_WIDTH+5:0]  mul_result_shifted;
-	assign sum_act_total = sum_act[0] + sum_act[1];
-	assign mul_result = sum_act_total * mul_const;
+	assign mul_result = (sum_act[0] + sum_act[1]) * mul_const;
 	shifter_constant #(.IN_WIDTH(SUM_ACT_WIDTH+3), .OUT_WIDTH(SUM_ACT_WIDTH+6)) shift_mul (
 		.in(mul_result), .is_shift(is_shift_mul), .out(mul_result_shifted)
 	);
@@ -176,7 +165,7 @@ module mac_unit_16_Vert_2_module
 	always @(posedge clk) begin
 		if (reset) begin
 			result <= 0;
-		end else if	(en) begin
+		end else if (en) begin
 			psum_special_pe_tmp <= psum_special_pe;
 			psum_shifted_tmp    <= psum_shifter_out;
 			result              <= psum_total + result;

@@ -72,10 +72,12 @@ module mac_unit_16_Wave
 	input  logic                          clk,
 	input  logic                          reset,
 	input  logic                          en,
+	input  logic                          load_accum,
 	input  logic signed [DATA_WIDTH-1:0]  act   [VEC_LENGTH-1:0], 
 	input  logic                          sign  [VEC_LENGTH-1:0],
 	input  logic                          w_bit [VEC_LENGTH-1:0],
 	input  logic        [2:0]             column_idx,
+	input  logic signed [DATA_WIDTH+16:0] result_prev,
 	output logic signed [DATA_WIDTH+16:0] result
 );
 	genvar j;
@@ -138,9 +140,10 @@ module mac_unit_16_Wave
 	always @(posedge clk) begin
 		if (reset) begin
 			result <= 0;
-		end else if (en) begin
-			psum_4_tmp <= shifted_psum;
-			result <= result + shifted_psum;
+		end else if (load_accum) begin
+			result <= result_prev;
+		end else if	(en) begin
+			result              <= shifted_psum + result;
 		end
 	end
 

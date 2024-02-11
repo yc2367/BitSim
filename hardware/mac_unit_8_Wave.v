@@ -76,7 +76,7 @@ module mac_unit_8_Wave
 	input  logic                          sign  [VEC_LENGTH-1:0],
 	input  logic                          w_bit [VEC_LENGTH-1:0],
 	input  logic        [2:0]             column_idx,
-	output logic signed [DATA_WIDTH+15:0] result
+	output logic signed [DATA_WIDTH+12:0] result
 );
 	genvar j;
 
@@ -108,7 +108,7 @@ module mac_unit_8_Wave
 
 	logic signed [DATA_WIDTH+1:0]  psum_1 [VEC_LENGTH/2-1:0];
 	logic signed [DATA_WIDTH+2:0]  psum_2 [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+2:0]  psum_3;
+	logic signed [DATA_WIDTH+3:0]  psum_3;
 
 	generate
 		for (j=0; j<VEC_LENGTH/2; j=j+1) begin
@@ -124,16 +124,16 @@ module mac_unit_8_Wave
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+9:0]  shifted_psum;
-	shifter #(.IN_WIDTH(DATA_WIDTH+3), .OUT_WIDTH(DATA_WIDTH+10)) shift (
+	logic signed [DATA_WIDTH+10:0]  shifted_psum;
+	shifter #(.IN_WIDTH(DATA_WIDTH+4), .OUT_WIDTH(DATA_WIDTH+11)) shift (
 		.in(psum_3), .shift_sel(column_idx), .out(shifted_psum)
 	);
 
 	always @(posedge clk) begin
 		if (reset) begin
 			result <= 0;
-		end else if (en) begin
-			result <= result + shifted_psum;
+		end else if	(en) begin
+			result  <= shifted_psum + result;
 		end
 	end
 
