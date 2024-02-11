@@ -105,37 +105,37 @@ module mac_unit_16_Vert_2_module
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH:0]    psum_1            [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+1:0]  psum_actin        [VEC_LENGTH/8-1:0];
-	logic signed [SUM_ACT_WIDTH-2:0] diff_act        [VEC_LENGTH/8-1:0];
-	logic signed [SUM_ACT_WIDTH-2:0] psum_actin_true [VEC_LENGTH/8-1:0];
+	logic signed [DATA_WIDTH:0]      psum_1        [VEC_LENGTH/4-1:0];
+	logic signed [DATA_WIDTH+1:0]    psum_act      [VEC_LENGTH/8-1:0];
+	logic signed [SUM_ACT_WIDTH-2:0] diff_act      [VEC_LENGTH/8-1:0];
+	logic signed [SUM_ACT_WIDTH-2:0] psum_act_true [VEC_LENGTH/8-1:0];
 	generate
 		for (j=0; j<VEC_LENGTH/4; j=j+1) begin
 			assign psum_1[j] = adder_in[2*j] + adder_in[2*j+1];
 		end
 
 		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			assign psum_actin[j] = psum_1[2*j] + psum_1[2*j+1];
+			assign psum_act[j] = psum_1[2*j] + psum_1[2*j+1];
 		end
 	
 		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			assign diff_act[j] = sum_act[j] - psum_actin[j];
+			assign diff_act[j] = sum_act[j] - psum_act[j];
 
 			always_comb begin
 				if (is_skip_zero[j]) begin
-					psum_actin_true[j] = psum_actin[j];
+					psum_act_true[j] = psum_act[j];
 				end else begin
-					psum_actin_true[j] = diff_act[j];
+					psum_act_true[j] = diff_act[j];
 				end
 			end
 		end
 	endgenerate
 
-	logic signed [SUM_ACT_WIDTH-1:0] psum_actin_total;
-	assign psum_actin_total = psum_actin_true[0] + psum_actin_true[1];
+	logic signed [SUM_ACT_WIDTH-1:0] psum_act_total;
+	assign psum_act_total = psum_act_true[0] + psum_act_true[1];
 
 	logic signed [SUM_ACT_WIDTH-1:0] psum_shifter_in;
-	pos_neg_select #(SUM_ACT_WIDTH) twos_complement (.in(psum_actin_total), .sign(is_msb), .out(psum_shifter_in));
+	pos_neg_select #(SUM_ACT_WIDTH) twos_complement (.in(psum_act_total), .sign(is_msb), .out(psum_shifter_in));
 
 	logic signed [SUM_ACT_WIDTH+6:0]  psum_shifter_out;
 	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH), .OUT_WIDTH(SUM_ACT_WIDTH+7)) shift_psum (
