@@ -25,7 +25,6 @@ always @(posedge clk) begin
 		end else begin
 			ou <= out;
             sel <= se;
-            vec <= ve;
 		end
 	end
 endmodule

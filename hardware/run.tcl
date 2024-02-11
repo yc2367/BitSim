@@ -2,11 +2,18 @@ set tsmc28 /pdks/tsmc/tsmc-28nm-cln28hpc-nda/stdview
 set workdir /home/yc2367/Desktop/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/stdcells.db"
 set_app_var link_library   "* $target_library"
-analyze -format sverilog $workdir/mac_unit_16_signed.v
-elaborate mac_unit_16_signed
+
+set func_Wave 0 ;
+if {$func_Wave} {
+    analyze -format sverilog $workdir/mac_unit_8_Wave.v
+    elaborate mac_unit_8_Wave
+} else {
+    analyze -format sverilog $workdir/mac_unit_16_Vert_2_module.v
+    elaborate mac_unit_16_Vert_2_module
+}
 
 check_design
-create_clock clk -name ideal_clock1 -period 1
+create_clock clk -name ideal_clock1 -period 1.25
 compile
 
 write -format verilog -hierarchy -output post-synth.v

@@ -19,7 +19,7 @@ module mux_9to1
             4'b0101: out = vec[5];
             4'b0110: out = vec[6];
             4'b0111: out = vec[7];
-            4'b1000: out = 0;
+            4'b1???: out = 0;
             default:  out = {DATA_WIDTH{1'bx}};
         endcase
     end

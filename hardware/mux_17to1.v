@@ -9,27 +9,35 @@ module mux_17to1
     input  logic [4:0]             sel,     
     output logic [DATA_WIDTH-1:0]  out
 );
+    logic [DATA_WIDTH-1:0]  out_tmp;
     always_comb begin
         case (sel) // synopsys infer_mux
-            5'b00000: out = vec[0];
-            5'b00001: out = vec[1];
-            5'b00010: out = vec[2];
-            5'b00011: out = vec[3];
-            5'b00100: out = vec[4];
-            5'b00101: out = vec[5];
-            5'b00110: out = vec[6];
-            5'b00111: out = vec[7];
-            5'b01000: out = vec[8];
-            5'b01001: out = vec[9];
-            5'b01010: out = vec[10];
-            5'b01011: out = vec[11];
-            5'b01100: out = vec[12];
-            5'b01101: out = vec[13];
-            5'b01110: out = vec[14];
-            5'b01111: out = vec[15];
-            5'b10000: out = 0;
-            default:  out = {DATA_WIDTH{1'bx}};
+            4'b0000: out_tmp = vec[0];
+            4'b0001: out_tmp = vec[1];
+            4'b0010: out_tmp = vec[2];
+            4'b0011: out_tmp = vec[3];
+            4'b0100: out_tmp = vec[4];
+            4'b0101: out_tmp = vec[5];
+            4'b0110: out_tmp = vec[6];
+            4'b0111: out_tmp = vec[7];
+            4'b1000: out_tmp = vec[8];
+            4'b1001: out_tmp = vec[9];
+            4'b1010: out_tmp = vec[10];
+            4'b1011: out_tmp = vec[11];
+            4'b1100: out_tmp = vec[12];
+            4'b1101: out_tmp = vec[13];
+            4'b1110: out_tmp = vec[14];
+            4'b1111: out_tmp = vec[15];
+            default:  out_tmp = {DATA_WIDTH{1'bx}};
         endcase
+    end
+
+    always_comb begin
+        if ( sel[4] == 1'b0 ) begin
+            out = out_tmp;
+        end else begin
+            out = 0;
+        end
     end
 endmodule
 
