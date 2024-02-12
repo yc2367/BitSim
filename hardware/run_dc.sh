@@ -5,3 +5,4 @@ rm *.svf
 rm *.pvl
 rm *.mr
 rm post-synth.*
+rm *.log

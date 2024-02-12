@@ -46,6 +46,29 @@ module shifter_3bit #(
 endmodule
 
 
+module shifter_hamming #(
+	parameter IN_WIDTH  = 12,
+	parameter OUT_WIDTH = 19
+) (
+	input  logic signed [IN_WIDTH-1:0]  in,
+	input  logic        [2:0]           shift_sel,	
+	output logic signed [OUT_WIDTH-1:0] out
+);
+	always_comb begin 
+		case (shift_sel)
+			3'b000 : out = in;
+			3'b001 : out = in <<< 1;
+			3'b010 : out = in <<< 2;
+			3'b011 : out = in <<< 3;
+			3'b100 : out = in <<< 4;
+			3'b101 : out = in <<< 5;
+			3'b110 : out = in <<< 6;
+			default: out = {OUT_WIDTH{1'bx}};
+		endcase
+	end
+endmodule
+
+
 module shifter_constant #( // can only shift 3-bit or no shift
 	parameter IN_WIDTH  = 12,
 	parameter OUT_WIDTH = 15
@@ -154,7 +177,7 @@ module mac_unit_16_Vert_2_module
 			hamming_actin = hamming_act;
 		end
 	end
-	shifter_3bit #(.IN_WIDTH(DATA_WIDTH), .OUT_WIDTH(DATA_WIDTH+6)) shift_hamming (
+	shifter_hamming #(.IN_WIDTH(DATA_WIDTH), .OUT_WIDTH(DATA_WIDTH+6)) shift_hamming (
 		.in(hamming_actin), .shift_sel(column_idx), .out(hamming_actin_shifted)
 	);
 
