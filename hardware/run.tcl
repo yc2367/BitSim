@@ -3,7 +3,7 @@ set workdir /home/yc2367/Desktop/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/stdcells.db"
 set_app_var link_library   "* $target_library"
 
-set func_Wave 0 ;
+set func_Wave 1 ;
 if {$func_Wave} {
     analyze -format sverilog $workdir/mac_unit_16_Wave.v
     elaborate mac_unit_16_Wave
