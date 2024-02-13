@@ -11,7 +11,7 @@ module mux_17to1
 );
     logic [DATA_WIDTH-1:0]  out_tmp;
     always_comb begin
-        case (sel) // synopsys infer_mux
+        case (sel[3:0]) // synopsys infer_mux
             4'b0000: out_tmp = vec[0];
             4'b0001: out_tmp = vec[1];
             4'b0010: out_tmp = vec[2];

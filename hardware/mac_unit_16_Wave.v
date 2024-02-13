@@ -23,7 +23,7 @@ endmodule
 
 module shifter #(
 	parameter IN_WIDTH  = 12,
-	parameter OUT_WIDTH = 19
+	parameter OUT_WIDTH = IN_WIDTH + 7
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic        [2:0]           shift_sel,	

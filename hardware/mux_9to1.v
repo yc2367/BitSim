@@ -9,19 +9,27 @@ module mux_9to1
     input  logic [3:0]             sel,    
     output logic [DATA_WIDTH-1:0]  out
 );
+    logic [DATA_WIDTH-1:0]  out_tmp;
     always_comb begin
-        case (sel) // synopsys infer_mux
-            4'b0000: out = vec[0];
-            4'b0001: out = vec[1];
-            4'b0010: out = vec[2];
-            4'b0011: out = vec[3];
-            4'b0100: out = vec[4];
-            4'b0101: out = vec[5];
-            4'b0110: out = vec[6];
-            4'b0111: out = vec[7];
-            4'b1???: out = 0;
-            default: out = {DATA_WIDTH{1'bx}};
+        case (sel[2:0]) // synopsys infer_mux
+            3'b000:  out_tmp = vec[0];
+            3'b001:  out_tmp = vec[1];
+            3'b010:  out_tmp = vec[2];
+            3'b011:  out_tmp = vec[3];
+            3'b100:  out_tmp = vec[4];
+            3'b101:  out_tmp = vec[5];
+            3'b110:  out_tmp = vec[6];
+            3'b111:  out_tmp = vec[7];
+            default: out_tmp = {DATA_WIDTH{1'bx}};
         endcase
+    end
+
+    always_comb begin
+        if ( sel[3] == 1'b0 ) begin
+            out = out_tmp;
+        end else begin
+            out = 0;
+        end
     end
     
 endmodule

@@ -23,7 +23,7 @@ endmodule
 
 module shifter #(
 	parameter IN_WIDTH  = 11,
-	parameter OUT_WIDTH = 18
+	parameter OUT_WIDTH = IN_WIDTH + 6
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic        [2:0]           shift_sel,	
@@ -38,7 +38,6 @@ module shifter #(
 			3'b100 : out = in <<< 4;
 			3'b101 : out = in <<< 5;
 			3'b110 : out = in <<< 6;
-			3'b111 : out = in <<< 7;
 			default: out = {OUT_WIDTH{1'bx}};
 		endcase
 	end
@@ -84,7 +83,7 @@ module mac_unit_8_Wave
 
 	logic signed [DATA_WIDTH+1:0]  psum_1 [VEC_LENGTH/2-1:0];
 	logic signed [DATA_WIDTH+2:0]  psum_2 [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+2:0]  psum_total;
+	logic signed [DATA_WIDTH+3:0]  psum_total;
 
 	generate
 		for (j=0; j<VEC_LENGTH/2; j=j+1) begin
@@ -101,7 +100,7 @@ module mac_unit_8_Wave
 	endgenerate
 
 	logic signed [DATA_WIDTH+9:0]  shifted_psum, shifted_psum_reg;
-	shifter #(.IN_WIDTH(DATA_WIDTH+3), .OUT_WIDTH(DATA_WIDTH+10)) shift (
+	shifter #(.IN_WIDTH(DATA_WIDTH+4), .OUT_WIDTH(DATA_WIDTH+10)) shift (
 		.in(psum_total), .shift_sel(column_idx), .out(shifted_psum)
 	);
 

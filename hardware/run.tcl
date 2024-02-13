@@ -5,8 +5,8 @@ set_app_var link_library   "* $target_library"
 
 set func 0 ;
 if {$func == 0} {
-    analyze -format sverilog $workdir/mac_unit_16_Wave.v
-    elaborate mac_unit_16_Wave_clk
+    analyze -format sverilog $workdir/mac_unit_8_Wave.v
+    elaborate mac_unit_8_Wave_clk
 } elseif {$func == 1} {
     analyze -format sverilog $workdir/mac_unit_16_Vert_2_module.v
     elaborate mac_unit_16_Vert_2_module_clk

@@ -143,13 +143,13 @@ module mac_unit_16_Vert_2_module
 		end
 	endgenerate
 
-	logic signed [SUM_ACT_WIDTH-1:0]  psum_act_total;
+	logic signed [SUM_ACT_WIDTH:0]  psum_act_total;
 	assign psum_act_total = psum_act_true[0] + psum_act_true[1];
 
-	logic signed [SUM_ACT_WIDTH-1:0]  psum_act_shift_in;
-	logic signed [SUM_ACT_WIDTH+6:0]  psum_act_shift_out;
-	pos_neg_select #(SUM_ACT_WIDTH) twos_complement (.in(psum_act_total), .sign(is_msb), .out(psum_act_shift_in));
-	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH), .OUT_WIDTH(SUM_ACT_WIDTH+7)) shift_psum (
+	logic signed [SUM_ACT_WIDTH:0]  psum_act_shift_in;
+	logic signed [SUM_ACT_WIDTH+7:0]  psum_act_shift_out;
+	pos_neg_select #(SUM_ACT_WIDTH+1) twos_complement (.in(psum_act_total), .sign(is_msb), .out(psum_act_shift_in));
+	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH+1), .OUT_WIDTH(SUM_ACT_WIDTH+8)) shift_psum (
 		.in(psum_act_shift_in), .shift_sel(column_idx), .out(psum_act_shift_out)
 	);
 
@@ -185,7 +185,7 @@ module mac_unit_16_Vert_2_module
 	end
 	
 	logic signed [SUM_ACT_WIDTH+4:0] psum_special_pe_tmp;
-	logic signed [SUM_ACT_WIDTH+6:0] psum_act_shift_tmp;
+	logic signed [SUM_ACT_WIDTH+7:0] psum_act_shift_tmp;
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
@@ -260,4 +260,5 @@ module mac_unit_16_Vert_2_module_clk
 
 	mac_unit_16_Vert_2_module #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
-`endif
+
+`endif 
