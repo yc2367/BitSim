@@ -9,7 +9,7 @@ module mac_accumulator_config
 ) (
 	input  logic signed [DATA_WIDTH-1:0]  accum   [VEC_LENGTH-1:0],
 	input  logic        [2:0]             sel,
-	output logic signed [DATA_WIDTH+1:0] result
+	output logic signed [DATA_WIDTH+1:0]  result
 );
 	genvar j;
 	localparam RESULT_WIDTH = DATA_WIDTH+2;

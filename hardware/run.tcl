@@ -3,17 +3,20 @@ set workdir /home/yc2367/Desktop/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/stdcells.db"
 set_app_var link_library   "* $target_library"
 
-set func_Wave 1 ;
-if {$func_Wave} {
+set func 0 ;
+if {$func == 0} {
     analyze -format sverilog $workdir/mac_unit_16_Wave.v
-    elaborate mac_unit_16_Wave
-} else {
+    elaborate mac_unit_16_Wave_clk
+} elseif {$func == 1} {
     analyze -format sverilog $workdir/mac_unit_16_Vert_2_module.v
-    elaborate mac_unit_16_Vert_2_module
+    elaborate mac_unit_16_Vert_2_module_clk
+} elseif {$func == 2} {
+    analyze -format sverilog $workdir/mac_accumulator_config_clk.v
+    elaborate mac_accumulator_config_clk
 }
 
 check_design
-create_clock clk -name ideal_clock1 -period 4
+create_clock clk -name ideal_clock1 -period 1
 compile
 
 write -format verilog -hierarchy -output post-synth.v
