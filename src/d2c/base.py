@@ -16,11 +16,10 @@ class D2C(object):
         self.pruned_column_num = args.N
         self.func = args.flag   # 0 for signed magnitude, 1 for 2s complement
 
-        self.hamming_distance = 0.5
+        self.hamming_distance = 2.5
 
         # fetch weights
-        self.target_layers = ["layer4.0.conv1", "layer4.0.conv2", "layer4.1.conv1", "layer4.0.conv2", "fc"]
-        self.fetch_weights()
+        self.target_layers = ["layer4.0.conv1", "layer4.0.conv2", "layer4.1.conv1", "layer4.1.conv2", "fc"]
         
 
     def fetch_weights(self):
@@ -37,6 +36,9 @@ class D2C(object):
 
     
     def convert(self):
+        
+        self.fetch_weights()
+
         self.new_weights = {}
         for k, weight in self.weight_dict.items():
             print(f"Layer [{k}] Start Conversion!")
