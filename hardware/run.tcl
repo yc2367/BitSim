@@ -5,18 +5,24 @@ set_app_var link_library   "* $target_library"
 
 set func 0 ;
 if {$func == 0} {
-    analyze -format sverilog $workdir/mac_unit_8_Wave.v
-    elaborate mac_unit_8_Wave_clk
+    analyze -format sverilog $workdir/mac_unit_Vert_16_module.v
+    elaborate mac_unit_Vert_16_module_clk
 } elseif {$func == 1} {
-    analyze -format sverilog $workdir/mac_unit_16_Vert_2_module.v
-    elaborate mac_unit_16_Vert_2_module_clk
+    analyze -format sverilog $workdir/mac_unit_Wave_8.v
+    elaborate mac_unit_Wave_8_clk
 } elseif {$func == 2} {
+    analyze -format sverilog $workdir/mac_unit_Pragmatic_8.v
+    elaborate mac_unit_Pragmatic_8_clk
+} elseif {$func == 3} {
+    analyze -format sverilog $workdir/mac_unit_Stripes_16.v
+    elaborate mac_unit_Stripes_16_clk
+} elseif {$func == 4} {
     analyze -format sverilog $workdir/mac_accumulator_config_clk.v
     elaborate mac_accumulator_config_clk
 }
 
 check_design
-create_clock clk -name ideal_clock1 -period 1
+create_clock clk -name ideal_clock1 -period 1.25
 compile
 
 write -format verilog -hierarchy -output post-synth.v

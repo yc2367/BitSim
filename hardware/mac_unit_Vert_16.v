@@ -1,5 +1,5 @@
-`ifndef __mac_unit_16_Vert_V__
-`define __mac_unit_16_Vert_V__
+`ifndef __mac_unit_Vert_16_V__
+`define __mac_unit_Vert_16_V__
 
 `include "mux_17to1.v"
 `include "mux_4to1.v"
@@ -47,7 +47,7 @@ module shifter_constant #( // can only shift 3-bit or no shift
 endmodule
 
 
-module mac_unit_16_Vert
+module mac_unit_Vert_16
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,

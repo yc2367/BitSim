@@ -1,8 +1,27 @@
-`ifndef __mac_unit_16_Wave_V__
-`define __mac_unit_16_Wave_V__
+`ifndef __mac_unit_Wave_8_V__
+`define __mac_unit_Wave_8_V__
 
-`include "pos_neg_select.v"
 `include "max_comparator.v"
+
+module pos_neg_select #(
+	parameter DATA_WIDTH = 8
+) (
+	input  logic signed [DATA_WIDTH-1:0] in,
+	input  logic                         sign,	
+	output logic signed [DATA_WIDTH:0]   out
+); 
+	logic signed [DATA_WIDTH:0] in_extended;
+	assign in_extended = {in[DATA_WIDTH-1], in};
+
+	always_comb begin
+		if (sign) begin
+			out = ~in_extended + 1'b1;
+		end else begin
+			out = in_extended;
+		end
+	end
+endmodule
+
 
 module value_select #(
 	parameter DATA_WIDTH = 9
@@ -21,9 +40,21 @@ module value_select #(
 endmodule
 
 
+module adder #(
+	parameter IN_WIDTH  = 8,
+	parameter OUT_WIDTH = 9	
+) (
+	input  logic signed [IN_WIDTH-1:0]  in_1,
+	input  logic signed [IN_WIDTH-1:0]  in_2,
+	output logic signed [OUT_WIDTH-1:0] out
+); 
+	assign out = in_1 + in_2;
+endmodule
+
+
 module shifter #(
-	parameter IN_WIDTH  = 12,
-	parameter OUT_WIDTH = IN_WIDTH + 7
+	parameter IN_WIDTH  = 11,
+	parameter OUT_WIDTH = IN_WIDTH + 6
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic        [2:0]           shift_sel,	
@@ -38,18 +69,16 @@ module shifter #(
 			3'b100 : out = in <<< 4;
 			3'b101 : out = in <<< 5;
 			3'b110 : out = in <<< 6;
-			3'b111 : out = in <<< 7;
 			default: out = {OUT_WIDTH{1'bx}};
 		endcase
 	end
-	
 endmodule
 
 
-module mac_unit_16_Wave
+module mac_unit_Wave_8
 #(
     parameter DATA_WIDTH    = 8,
-	parameter VEC_LENGTH    = 16,
+	parameter VEC_LENGTH    = 8,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
@@ -84,29 +113,29 @@ module mac_unit_16_Wave
 
 	logic signed [DATA_WIDTH+1:0]  psum_1 [VEC_LENGTH/2-1:0];
 	logic signed [DATA_WIDTH+2:0]  psum_2 [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+3:0]  psum_3 [VEC_LENGTH/8-1:0];
-	logic signed [DATA_WIDTH+3:0]  psum_total ;
-
+	logic signed [DATA_WIDTH+3:0]  psum_total;
 	generate
 		for (j=0; j<VEC_LENGTH/2; j=j+1) begin
-			assign psum_1[j] = bs_mul_out[2*j] + bs_mul_out[2*j+1];
+			adder #(DATA_WIDTH+1, DATA_WIDTH+2) adder_1 (
+				.in_1(bs_mul_out[2*j]), .in_2(bs_mul_out[2*j+1]), .out(psum_1[j])
+			);
 		end
 
 		for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-			assign psum_2[j] = psum_1[2*j] + psum_1[2*j+1];
+			adder #(DATA_WIDTH+2, DATA_WIDTH+3) adder_2 (
+				.in_1(psum_1[2*j]), .in_2(psum_1[2*j+1]), .out(psum_2[j])
+			);
 		end
 
 		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			assign psum_3[j] = psum_2[2*j] + psum_2[2*j+1];
-		end
-
-		for (j=0; j<VEC_LENGTH/16; j=j+1) begin
-			assign psum_total = psum_3[2*j] + psum_3[2*j+1];
+			adder #(DATA_WIDTH+3, DATA_WIDTH+4) adder_3 (
+				.in_1(psum_2[2*j]), .in_2(psum_2[2*j+1]), .out(psum_total)
+			);
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+10:0]  shifted_psum, shifted_psum_reg;
-	shifter #(.IN_WIDTH(DATA_WIDTH+4), .OUT_WIDTH(DATA_WIDTH+11)) shift (
+	logic signed [DATA_WIDTH+9:0]  shifted_psum, shifted_psum_reg;
+	shifter #(.IN_WIDTH(DATA_WIDTH+4), .OUT_WIDTH(DATA_WIDTH+10)) shift (
 		.in(psum_total), .shift_sel(column_idx), .out(shifted_psum)
 	);
 
@@ -144,10 +173,10 @@ module mac_unit_16_Wave
 endmodule
 
 
-module mac_unit_16_Wave_clk
+module mac_unit_Wave_8_clk
 #(
-    parameter DATA_WIDTH    = 8,
-	parameter VEC_LENGTH    = 16,
+	parameter DATA_WIDTH    = 8,
+	parameter VEC_LENGTH    = 8,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
@@ -166,7 +195,7 @@ module mac_unit_16_Wave_clk
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
 	genvar j;
-
+	
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
 	generate
 	for (j=0; j<VEC_LENGTH; j=j+1) begin
@@ -180,7 +209,7 @@ module mac_unit_16_Wave_clk
 	end
 	endgenerate
 
-	mac_unit_16_Wave #(DATA_WIDTH, VEC_LENGTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
+	mac_unit_Wave_8 #(DATA_WIDTH, VEC_LENGTH) mac (.*);
 endmodule
 
 `endif
