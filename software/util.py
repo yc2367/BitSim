@@ -133,7 +133,7 @@ def take_twosComplement(wqb_list, w_bitwidth=8, cellbit=1):
     return new_wqb_list
 
 
-def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=4):
     '''
     Apply bit-flip to a group of quantized weights in sign-magnitude format
     '''
@@ -186,21 +186,18 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
                 error = new_error
                 #print(error)
                 new_value = tmp_value
-
+            else:
+                break
         int_test_new[i] = new_value
 
     column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-test_until)
     group_binary[test_until:] = column_test_new
     group_int_new = signMagnitude_to_int(group_binary, w_bitwidth=w_bitwidth)
 
-    if return_binary:
-        return group_binary
-    else:
-        return group_int_new
+    return group_int_new
 
 
-def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required=4, 
-                           return_binary=False, h_distance_target=0):
+def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required=4, h_distance_target=0):
     '''
     Apply bit-flip to a group of quantized weights in 2's complement format
     '''
@@ -240,53 +237,82 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     
     # no need to prune
     if zero_column_required <= 0: 
-        if return_binary:
-            return group_binary
+        return group_q
+    
+    test_bitVert_strategy = True
+    test_bitWave_strategy = True
+    if test_bitVert_strategy:
+        # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
+        # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
+        if prune_until == 1:
+            int_test_bitVert = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+            int_test_new_bitVert = torch.zeros_like(int_test_bitVert)
+            error_bitVert = 1e7
+            for value in range(-2**(w_bitwidth-2), 2**(w_bitwidth-2)):
+                tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
+                new_error = torch.sum((tmp_tensor - int_test_bitVert)**2)
+                #print('new error', new_error)
+                if new_error < error_bitVert:
+                    error_bitVert = new_error
+                    int_test_new_bitVert = tmp_tensor
+                else:
+                    break
+            group_int_new = int_test_new_bitVert
         else:
-            return group_q
+            column_test = group_binary[prune_until:]
+            int_test_bitVert = binary_to_int(column_test, w_bitwidth=w_bitwidth-prune_until)
+            int_test_new_bitVert = torch.zeros_like(int_test_bitVert)
+            error_bitVert = 1e7
+            for value in range(2**(w_bitwidth-prune_until)):
+                tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
+                new_error = torch.sum((tmp_tensor - int_test_bitVert)**2)
+                #print('new error', new_error)
+                if new_error < error_bitVert:
+                    #print(tmp_value)
+                    error_bitVert = new_error
+                    #print(error)
+                    int_test_new_bitVert = tmp_tensor
+                else:
+                    break
 
-    # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
-    # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
-    if prune_until == 1:
-        int_test = twosComplement_to_int(group_binary,
-                                         w_bitwidth=w_bitwidth)
-        int_test_new = torch.zeros_like(int_test)
-        error = 1e7
-        for value in range(-2**(w_bitwidth-2), 2**(w_bitwidth-2)):
-            tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            new_error = torch.sum((tmp_tensor - int_test)**2)
-            #print('new error', new_error)
-            if new_error < error:
-                error = new_error
-                int_test_new = tmp_tensor
-            else:
-                break
-        group_int_new = int_test_new
-    else:
-        column_test = group_binary[prune_until:]
-        int_test = binary_to_int(column_test,
-                                 w_bitwidth=w_bitwidth-prune_until)
-        int_test_new = torch.zeros_like(int_test)
-        error = 1e7
-        for value in range(2**(w_bitwidth-prune_until)):
-            tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            new_error = torch.sum((tmp_tensor - int_test)**2)
-            #print('new error', new_error)
-            if new_error < error:
-                #print(tmp_value)
-                error = new_error
-                #print(error)
-                int_test_new = tmp_tensor
-            else:
-                break
-        column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-prune_until)
+    if test_bitWave_strategy:
+        zero_column_idx = [idx if idx < prune_until else 0 for idx in zero_column_idx]
+        test_until = max(zero_column_idx) + 1
+        group_binary = int_to_signMagnitude(group_q, w_bitwidth=w_bitwidth)
+    
+        # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+        # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+        column_test = group_binary[test_until:]
+        int_test_bitWave = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until)
+        #print(prune_until, test_until)
+        int_test_new_bitWave = torch.zeros_like(int_test_bitWave)
+
+        for i, value in enumerate(int_test_bitWave.tolist()):
+            new_value = 0
+            error_bitWave = 1e7
+            for n in range(2**(prune_until-test_until)):
+                tmp_value = n * 2.**(w_bitwidth-prune_until)
+                new_error = ((tmp_value - value)**2)
+                #print('new error', new_error)
+                if new_error < error_bitWave:
+                    #print(tmp_value)
+                    error_bitWave = new_error
+                    #print(error)
+                    new_value = tmp_value
+                else: 
+                    break
+            int_test_new_bitWave[i] = new_value
+    
+    if error_bitVert < error_bitWave:
+        column_test_new = int_to_binary(int_test_new_bitVert, w_bitwidth=w_bitwidth-prune_until)
         group_binary[prune_until:] = column_test_new
         group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
-
-    if return_binary:
-        return group_binary
     else:
-        return group_int_new
+        column_test_new = int_to_binary(int_test_new_bitWave, w_bitwidth=w_bitwidth-test_until)
+        group_binary[test_until:] = column_test_new
+        group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+
+    return group_int_new
     
 
 def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
