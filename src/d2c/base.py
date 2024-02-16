@@ -16,7 +16,7 @@ class D2C(object):
         self.pruned_column_num = args.N
         self.func = args.flag   # 0 for signed magnitude, 1 for 2s complement
 
-        self.hamming_distance = 2.5
+        self.hamming_distance = 1.5
 
         # fetch weights
         self.target_layers = ["layer4.0.conv1", "layer4.0.conv2", "layer4.1.conv1", "layer4.1.conv2", "fc"]

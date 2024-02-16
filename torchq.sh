@@ -32,6 +32,6 @@ python3 -W ignore ./torchq.py \
     --val_dir "/share/seo/imagenet/val/" \
     --evaluate \
     --trainer ptq \
-    --flag 1 \
+    --flag 0 \
     --grp_size 16 \
-    --N 1
+    --N 5
