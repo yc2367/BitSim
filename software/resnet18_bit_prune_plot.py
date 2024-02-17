@@ -28,7 +28,7 @@ for n, m in model.named_modules():
 GROUP_SIZE = 16
 w_bitwidth = 8
 
-loss = 1
+loss = 0
 if loss == 0:
     metric = 'MSE'
 else: 
@@ -36,7 +36,7 @@ else:
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hamming_distance = 2.5
+    hamming_distance = 1.5
     for N in range(4, 5):
         pruned_column_num = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')

@@ -24,7 +24,7 @@ w_bitwidth = 8
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hamming_distance = 0.5
+    hamming_distance = 1.5
     for N in range(4, 5):
         pruned_column_num = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
@@ -33,7 +33,7 @@ def main():
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')
-            print(weight_test.unique())
+            #print(weight_test.unique())
             for func in [0, 1]:
                 if func == 0:
                     format = 'Sign Magnitude'
@@ -43,7 +43,7 @@ def main():
                     elif len(weight_test.shape) == 2:
                         weight_test_new = process_signMagnitude_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                 pruned_column_num=pruned_column_num, device=device)
-                    print(weight_test_new.unique())
+                    #print(weight_test_new.unique())
                 else:
                     format = '2s Complement'
                     if len(weight_test.shape) == 4:
@@ -54,7 +54,7 @@ def main():
                         weight_test_new = process_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     pruned_column_num=pruned_column_num, device=device,
                                                                     h_distance_target=hamming_distance)
-                    print(weight_test_new.unique())
+                    #print(weight_test_new.unique())
                 weight_original = weight_test.to(torch.float)
                 weight_new = weight_test_new.to(torch.float)
 
