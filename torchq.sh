@@ -18,7 +18,7 @@ xqtype="lsq"
 wqtype="adaround"
 ttype=ptq
 
-save_path="/home/jm2787/BitSim/save/resnet18_torchvision/t2c/"
+save_path="/home/yc2367/BitSim/save/resnet18_torchvision/t2c/"
 
 python3 -W ignore ./torchq.py \
     --save_path ${save_path} \
