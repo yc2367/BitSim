@@ -34,4 +34,5 @@ python3 -W ignore ./torchq.py \
     --trainer ptq \
     --flag 1 \
     --grp_size 16 \
-    --N 3
+    --N 3 \
+    --hamming_distance 1.5 \

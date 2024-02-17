@@ -75,7 +75,7 @@ parser.add_argument('--num_samples', type=int, default=1024, help="Number of sam
 parser.add_argument('--N', type=int, default=4, help="Number of pruned columns")
 parser.add_argument('--grp_size', type=int, default=16, help="Group size")
 parser.add_argument('--flag', type=int, default=0, help="0 for signed magnitude, 1 for 2s complement")
-parser.add_argument('--hamming_distance', type=float, default=1.5, help="hamming distance")
+parser.add_argument('--hamming_distance', type=float, default=1.5, help="hamming distance ")
 
 
 args = parser.parse_args()
