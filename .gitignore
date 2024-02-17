@@ -1,6 +1,7 @@
 __pycache__/
 
 software/*.txt
+software/plot/*
 
 hardware/work/*
 hardware/*.log
