@@ -1,5 +1,5 @@
-`ifndef __mac_unit_16_Vert_V__
-`define __mac_unit_16_Vert_V__
+`ifndef __mac_unit_Vert_16_V__
+`define __mac_unit_Vert_16_V__
 
 `include "mux_17to1.v"
 `include "mux_4to1.v"
@@ -47,7 +47,7 @@ module shifter_constant #( // can only shift 3-bit or no shift
 endmodule
 
 
-module mac_unit_16_Vert
+module mac_unit_Vert_16
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
@@ -64,7 +64,6 @@ module mac_unit_16_Vert
 	// signal to select an activation that can be calculated wuth hamming distance 
 	input  logic        [MUX_SEL_WIDTH-1:0]  hamming_sel,  
 	input  logic                             hamming_sign,  
-	input  logic                             hamming_en,  
 
 	input  logic signed [SUM_ACT_WIDTH-1:0]  sum_act,       // sum of a group of activations (signed)
 	input  logic        [2:0]                column_idx,    // current column index for shifting 
@@ -79,24 +78,20 @@ module mac_unit_16_Vert
 	genvar j;
 
 	logic [DATA_WIDTH-1:0]     actin     [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
-	logic [MUX_SEL_WIDTH-1:0]  actin_sel [VEC_LENGTH/2-1:0];
-	generate
-	for (j=0; j<VEC_LENGTH/2; j=j+1) begin
-		always @(posedge clk) begin
-			if (reset) begin
-				actin_sel[j] <= {MUX_SEL_WIDTH{1'b1}};
-			end else begin
-				actin_sel[j] <= act_sel[j];
-			end
-		end
-	end
-	endgenerate
-
+	logic [DATA_WIDTH-1:0]     adder_in  [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
 	generate
 	for (j=0; j<VEC_LENGTH/2; j=j+1) begin
 		mux_17to1 #(DATA_WIDTH) mux_act (
-			.vec(act), .sel(actin_sel[j]), .out(actin[j])
+			.vec(act), .sel(act_sel[j]), .out(actin[j])
 		);
+
+		always @(posedge clk) begin
+			if (reset) begin
+				adder_in[j] <= 0;
+			end else begin
+				adder_in[j] <= actin[j];
+			end
+		end
 	end
 	endgenerate
 
@@ -106,7 +101,7 @@ module mac_unit_16_Vert
 	logic signed [DATA_WIDTH+2:0]  psum_actin_complement;
 	generate
 		for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-			assign psum_1[j] = actin[2*j] + actin[2*j+1];
+			assign psum_1[j] = adder_in[2*j] + adder_in[2*j+1];
 		end
 
 		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
@@ -125,52 +120,55 @@ module mac_unit_16_Vert
 	logic signed [SUM_ACT_WIDTH-1:0]  diff_act_complement;
 	assign diff_act_complement = psum_actin - sum_act;
 
-	logic [SUM_ACT_WIDTH-1:0] psum_mux_in [3:0];
+	logic signed [SUM_ACT_WIDTH-1:0] psum_mux_in [3:0];
 	assign psum_mux_in[3] = psum_actin_complement; // {is_msb, is_skip_zero}  = 2'b11
 	assign psum_mux_in[2] = diff_act_complement;   // {is_msb, is_skip_zero}  = 2'b10
 	assign psum_mux_in[1] = psum_actin;            // {is_msb, is_skip_zero}  = 2'b01
 	assign psum_mux_in[0] = diff_act;              // {is_msb, is_skip_zero}  = 2'b00
 
 	logic [SUM_ACT_WIDTH-1:0] psum_mux_out;
+	logic signed [SUM_ACT_WIDTH+6:0]  psum_shifted;
 	mux_4to1 #(SUM_ACT_WIDTH) mux_psum (.vec(psum_mux_in), .sel({is_msb, is_skip_zero}), .out(psum_mux_out));
+	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH), .OUT_WIDTH(SUM_ACT_WIDTH+7)) shift_psum (
+		.in(psum_mux_out), .shift_sel(column_idx), .out(psum_shifted)
+	);
 
 	logic signed [DATA_WIDTH-1:0]     hamming_act;
 	mux_17to1 #(DATA_WIDTH) mux_hamming (.vec(act), .sel(hamming_sel), .out(hamming_act));
 
-	logic signed [DATA_WIDTH-1:0]     hamming_actin;
+	logic signed [DATA_WIDTH-1:0]  hamming_actin;
+	logic signed [DATA_WIDTH+5:0]  hamming_actin_shifted;
 	always_comb begin
-		if ( hamming_en ) begin
-			if ( hamming_sign == 1'b1 ) begin
-				hamming_actin = ~hamming_act + 1;
-			end else begin
-				hamming_actin = hamming_act;
-			end
+		if ( hamming_sign == 1'b1 ) begin
+			hamming_actin = ~hamming_act + 1;
 		end else begin
-			hamming_actin = 0;
+			hamming_actin = hamming_act;
 		end
 	end
-
-	logic signed [SUM_ACT_WIDTH-1:0]  hamming_psum;
-	assign hamming_psum = hamming_actin + psum_mux_out;
-
-	logic signed [SUM_ACT_WIDTH+6:0]  hamming_psum_shifted;
-	shifter_3bit #(.IN_WIDTH(SUM_ACT_WIDTH), .OUT_WIDTH(SUM_ACT_WIDTH+7)) shift_psum (
-		.in(hamming_psum), .shift_sel(column_idx), .out(hamming_psum_shifted)
+	shifter_3bit #(.IN_WIDTH(DATA_WIDTH), .OUT_WIDTH(DATA_WIDTH+6)) shift_hamming_actin (
+		.in(hamming_actin), .shift_sel(column_idx), .out(hamming_actin_shifted)
 	);
 
 	logic signed [SUM_ACT_WIDTH+2:0]  mul_result;
-	assign mul_result = sum_act * mul_const;
-
 	logic signed [SUM_ACT_WIDTH+5:0]  mul_result_shifted;
+	assign mul_result = sum_act * mul_const;
 	shifter_constant #(.IN_WIDTH(SUM_ACT_WIDTH+3), .OUT_WIDTH(SUM_ACT_WIDTH+6)) shift_mul (
-		.in(mul_result), .shift_sel(is_shift_mul), .out(mul_result_shifted)
+		.in(mul_result), .is_shift(is_shift_mul), .out(mul_result_shifted)
 	);
+
+	logic signed [SUM_ACT_WIDTH+6:0] psum_special_pe;
+	assign psum_special_pe = mul_result_shifted + hamming_actin_shifted;
+
+	logic signed [SUM_ACT_WIDTH+6:0] psum_shifted_tmp, psum_special_pe_tmp, psum_total;
+	assign psum_total = psum_shifted_tmp + psum_special_pe_tmp;
 
 	always @(posedge clk) begin
 		if (reset) begin
 			result <= 0;
 		end else if (en) begin
-			result <= result + mul_result_shifted + hamming_psum_shifted;
+			psum_special_pe_tmp <= psum_special_pe;
+			psum_shifted_tmp    <= psum_shifted;
+			result              <= psum_total + result;
 		end
 	end
 

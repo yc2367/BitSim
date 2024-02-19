@@ -72,7 +72,7 @@ endmodule
 
 module shifter_constant #( // can only shift 3-bit or no shift
 	parameter IN_WIDTH  = 12,
-	parameter OUT_WIDTH = 15
+	parameter OUT_WIDTH = IN_WIDTH + 3
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic                        is_shift,	
@@ -165,7 +165,7 @@ module mac_unit_Vert_16_module
 	assign psum_act_total = psum_act_true[0] + psum_act_true[1];
 
 	logic signed [PSUM_ACT_WIDTH-1:0]  psum_act_shift_in;
-	logic signed [PSUM_ACT_WIDTH+6:0]   psum_act_shift_out;
+	logic signed [PSUM_ACT_WIDTH+6:0]  psum_act_shift_out;
 	pos_neg_select #(PSUM_ACT_WIDTH) twos_complement (.in(psum_act_total), .sign(is_msb), .out(psum_act_shift_in));
 	shifter_3bit #(.IN_WIDTH(PSUM_ACT_WIDTH), .OUT_WIDTH(PSUM_ACT_WIDTH+7)) shift_psum (
 		.in(psum_act_shift_in), .shift_sel(column_idx), .out(psum_act_shift_out)

@@ -52,7 +52,7 @@ module mac_unit_Stripes_8
 	input  logic signed [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0], 
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
 	input  logic                             is_msb,
-	input  logic                             is_msb_delayed,
+	input  logic                             delayed_is_msb,
 	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
@@ -91,7 +91,7 @@ module mac_unit_Stripes_8
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
 	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
-		if (is_msb_delayed) begin
+		if (delayed_is_msb) begin
 			accum_in = result_prev;
 		end else begin
 			accum_in = accum_out <<< 1;
@@ -137,7 +137,7 @@ module mac_unit_Stripes_8_clk
 	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
 	input  logic                             is_msb,
-	input  logic                             is_msb_delayed,
+	input  logic                             delayed_is_msb,
 	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
