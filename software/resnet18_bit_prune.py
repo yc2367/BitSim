@@ -29,7 +29,7 @@ def main():
         pruned_column_num = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
 
-        for i in range(15, len(weight_list)):
+        for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')
@@ -55,6 +55,7 @@ def main():
                                                                     pruned_column_num=pruned_column_num, device=device,
                                                                     h_distance_target=hamming_distance)
                     #print(weight_test_new.unique())
+
                 weight_original = weight_test.to(torch.float)
                 weight_new = weight_test_new.to(torch.float)
 

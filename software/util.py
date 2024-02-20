@@ -248,37 +248,15 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
     # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
     # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
     if prune_until == 1:
-        int_test = twosComplement_to_int(group_binary,
-                                         w_bitwidth=w_bitwidth)
-        int_test_new = torch.zeros_like(int_test)
-        error = 1e7
-        for value in range(-2**(w_bitwidth-2), 2**(w_bitwidth-2)):
-            tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            new_error = torch.sum((tmp_tensor - int_test)**2)
-            #print('new error', new_error)
-            if new_error < error:
-                error = new_error
-                int_test_new = tmp_tensor
-            else:
-                break
+        int_test = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
+        value_mean = torch.round(torch.mean(int_test))
+        int_test_new = torch.Tensor([value_mean for _ in range(group_q.shape[0])])
         group_int_new = int_test_new
     else:
         column_test = group_binary[prune_until:]
-        int_test = binary_to_int(column_test,
-                                 w_bitwidth=w_bitwidth-prune_until)
-        int_test_new = torch.zeros_like(int_test)
-        error = 1e7
-        for value in range(2**(w_bitwidth-prune_until)):
-            tmp_tensor = torch.Tensor([value for _ in range(group_q.shape[0])])
-            new_error = torch.sum((tmp_tensor - int_test)**2)
-            #print('new error', new_error)
-            if new_error < error:
-                #print(tmp_value)
-                error = new_error
-                #print(error)
-                int_test_new = tmp_tensor
-            else:
-                break
+        int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-prune_until)
+        value_mean = torch.round(torch.mean(int_test))
+        int_test_new = torch.Tensor([value_mean for _ in range(group_q.shape[0])])
         column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-prune_until)
         group_binary[prune_until:] = column_test_new
         group_int_new = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
