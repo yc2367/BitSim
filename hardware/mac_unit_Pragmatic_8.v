@@ -52,21 +52,25 @@ endmodule
 
 module shifter_2nd_stage #(
 	parameter IN_WIDTH  = 8,
-	parameter OUT_WIDTH = IN_WIDTH + 4
+	parameter OUT_WIDTH = IN_WIDTH + 7
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
-	input  logic        [1:0]           shift_sel,
+	input  logic        [2:0]           shift_sel,
 	input  logic                        en, 	
 	output logic signed [OUT_WIDTH-1:0] out
 );
 	logic signed [OUT_WIDTH-1:0] out_tmp;
 	always_comb begin 
 		case (shift_sel)
-			2'b00 :  out_tmp = in <<< 1;
-			2'b01 :  out_tmp = in <<< 2;
-			2'b10 :  out_tmp = in <<< 3;
-			2'b11 :  out_tmp = in <<< 4;
-			default: out_tmp = {OUT_WIDTH{1'bx}};
+			3'b000 :  out_tmp = in <<< 0;
+			3'b001 :  out_tmp = in <<< 1;
+			3'b010 :  out_tmp = in <<< 2;
+			3'b011 :  out_tmp = in <<< 3;
+			3'b100 :  out_tmp = in <<< 4;
+			3'b101 :  out_tmp = in <<< 5;
+			3'b110 :  out_tmp = in <<< 6;
+			3'b111 :  out_tmp = in <<< 7;
+			default:  out_tmp = {OUT_WIDTH{1'bx}};
 		endcase
 	end
 
@@ -96,7 +100,7 @@ module mac_unit_Pragmatic_8
 	input  logic signed [DATA_WIDTH-1:0]     act_in         [VEC_LENGTH-1:0], 
 	input  logic        [1:0]                shift_1st_sel  [VEC_LENGTH-1:0],
 	input  logic                             shift_1st_en   [VEC_LENGTH-1:0],
-	input  logic        [1:0]                shift_2nd_sel, // 2nd-stage shifter
+	input  logic        [2:0]                shift_2nd_sel, // 2nd-stage shifter
 	input  logic                             shift_2nd_en,  // whether enable 2nd-stage shifter
 	input  logic                             is_neg         [VEC_LENGTH-1:0],
 
@@ -135,8 +139,8 @@ module mac_unit_Pragmatic_8
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+8:0]  psum_total;
-	shifter_2nd_stage #(DATA_WIDTH+5, DATA_WIDTH+9) shift_2nd (
+	logic signed [DATA_WIDTH+11:0]  psum_total;
+	shifter_2nd_stage #(DATA_WIDTH+5, DATA_WIDTH+12) shift_2nd (
 		.in(psum_3), .shift_sel(shift_2nd_sel), .en(shift_2nd_en), .out(psum_total)
 	);
 
@@ -150,7 +154,7 @@ module mac_unit_Pragmatic_8
 		end
 	end
 
-	logic signed [DATA_WIDTH+8:0]  psum_total_reg;
+	logic signed [DATA_WIDTH+11:0]  psum_total_reg;
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
