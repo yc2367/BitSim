@@ -1,7 +1,7 @@
-`ifndef __mac_unit_Vert_16_no_optimization_V__
-`define __mac_unit_Vert_16_no_optimization_V__
+`ifndef __mac_unit_Vert_16_mux_optimization_V__
+`define __mac_unit_Vert_16_mux_optimization_V__
 
-`include "mux_9to1.v"
+`include "mux_5to1.v"
 `include "max_comparator.v"
 
 
@@ -64,11 +64,11 @@ module shifter_constant #( // can only shift 3-bit or no shift
 endmodule
 
 
-module mac_unit_Vert_16_no_optimization
+module mac_unit_Vert_16_mux_optimization
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH) + 1,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
 	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
@@ -80,6 +80,7 @@ module mac_unit_Vert_16_no_optimization
 
 	input  logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
 	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
@@ -100,8 +101,8 @@ module mac_unit_Vert_16_no_optimization
 	generate
 		for (i=0; i<VEC_LENGTH/8; i=i+1) begin
 			for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-				mux_9to1 #(DATA_WIDTH) mux_act (
-					.vec(act_in[8*i+7:8*i]), .sel(act_sel[4*i+j]), .out(adder_in[4*i+j])
+				mux_5to1 #(DATA_WIDTH) mux_act (
+					.vec(act_in[8*i+j+4:8*i+j]), .sel(act_sel[4*i+j]), .val(act_val[4*i+j]), .out(adder_in[4*i+j])
 				);
 			end
 		end
@@ -137,25 +138,40 @@ module mac_unit_Vert_16_no_optimization
 	assign psum_act_total = psum_act_true[0] + psum_act_true[1];
 
 	logic signed [PSUM_ACT_WIDTH-1:0]  psum_act_shift_in;
+	logic signed [PSUM_ACT_WIDTH+6:0]  psum_act_shift_out;
 	pos_neg_select #(PSUM_ACT_WIDTH) twos_complement (.in(psum_act_total), .sign(is_msb), .out(psum_act_shift_in));
+	shifter_3bit #(.IN_WIDTH(PSUM_ACT_WIDTH), .OUT_WIDTH(PSUM_ACT_WIDTH+7)) shift_psum (
+		.in(psum_act_shift_in), .shift_sel(column_idx), .out(psum_act_shift_out)
+	);
+
+	logic signed [PSUM_ACT_WIDTH-1:0]  sum_act_total;
+	logic signed [PSUM_ACT_WIDTH+1:0]  mul_result;
+	logic signed [PSUM_ACT_WIDTH+4:0]  mul_result_true;
+	assign sum_act_total = sum_act[0] + sum_act[1];
+	assign mul_result = sum_act_total * mul_const;
+	shifter_constant #(.IN_WIDTH(PSUM_ACT_WIDTH+2), .OUT_WIDTH(PSUM_ACT_WIDTH+5)) shift_mul (
+		.in(mul_result), .is_shift(is_shift_mul), .out(mul_result_true)
+	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
 	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
-		if (is_msb) begin
-			accum_in = result_prev;
+		if (load_accum) begin
+			accum_in = {result_prev, {PAD_WIDTH{1'b0}}};
 		end else begin
-			accum_in = accum_out <<< 1;
+			accum_in = accum_out;
 		end
 	end
 	
+	logic signed [PSUM_ACT_WIDTH+4:0] mul_result_true_reg;
 	logic signed [PSUM_ACT_WIDTH+6:0] psum_act_shift_reg;
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
 		end else if	(en) begin
-			psum_act_shift_reg  <= psum_act_shift_in;
-			accum_out           <= psum_act_shift_reg + accum_in;
+			mul_result_true_reg <= mul_result_true;
+			psum_act_shift_reg  <= psum_act_shift_out;
+			accum_out           <= mul_result_true_reg + psum_act_shift_reg + accum_in;
 		end
 	end
 
@@ -174,11 +190,11 @@ module mac_unit_Vert_16_no_optimization
 endmodule
 
 
-module mac_unit_Vert_16_no_optimization_clk
+module mac_unit_Vert_16_mux_optimization_clk
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH) + 1,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
 	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
@@ -190,6 +206,7 @@ module mac_unit_Vert_16_no_optimization_clk
 
 	input  logic signed   [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
 	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
@@ -218,7 +235,7 @@ module mac_unit_Vert_16_no_optimization_clk
 	end
 	endgenerate
 
-	mac_unit_Vert_16_no_optimization #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
+	mac_unit_Vert_16_mux_optimization #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
 
 `endif 

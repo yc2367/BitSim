@@ -3,10 +3,10 @@ set workdir /home/yc2367/Desktop/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/stdcells.db"
 set_app_var link_library   "* $target_library"
 
-set func 0 ;
+set func 3 ;
 if {$func == 0} {
-    analyze -format sverilog $workdir/mac_unit_Vert_16.v
-    elaborate mac_unit_Vert_16_clk
+    analyze -format sverilog $workdir/mac_unit_Vert_16_mux_optimization.v
+    elaborate mac_unit_Vert_16_mux_optimization_clk
 } elseif {$func == 1} {
     analyze -format sverilog $workdir/mac_unit_Wave_8.v
     elaborate mac_unit_Wave_8_clk
@@ -30,6 +30,5 @@ write -format ddc     -hierarchy -output post-synth.ddc
 report_resources -nosplit -hierarchy
 report_timing -nosplit -transition_time -nets -attributes
 report_area -nosplit -hierarchy
-report_power -nosplit -hierarchy
 
 exit

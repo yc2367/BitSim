@@ -58,7 +58,7 @@ module mac_unit_Stripes_16
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter ACC_WIDTH     = 2*DATA_WIDTH + 7,
+	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
 	input  logic                             clk,
@@ -148,7 +148,7 @@ module mac_unit_Stripes_16_clk
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter ACC_WIDTH     = 2*DATA_WIDTH + 7,
+	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
 	input  logic                             clk,
