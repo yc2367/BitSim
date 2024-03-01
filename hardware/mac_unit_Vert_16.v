@@ -3,7 +3,6 @@
 
 `include "mux_5to1.v"
 
-
 module pos_neg_select #(
 	parameter DATA_WIDTH = 8
 ) (
@@ -45,7 +44,7 @@ module shifter_3bit #(
 endmodule
 
 
-module shifter_constant #( // can only shift 3-bit or no shift
+module shifter_constant #( // can shift 3-bit or no shift
 	parameter IN_WIDTH  = 12,
 	parameter OUT_WIDTH = IN_WIDTH + 3
 ) (
@@ -118,7 +117,7 @@ module mac_unit_Vert_16
 	endgenerate
 
 	logic signed [DATA_WIDTH:0]      psum_1        [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+1:0]    psum_act      [VEC_LENGTH/8-1:0];
+	logic signed [SUM_ACT_WIDTH-1:0]    psum_act      [VEC_LENGTH/8-1:0];
 	logic signed [SUM_ACT_WIDTH-1:0] diff_act      [VEC_LENGTH/8-1:0];
 	logic signed [SUM_ACT_WIDTH-1:0] psum_act_true [VEC_LENGTH/8-1:0];
 	generate

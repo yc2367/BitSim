@@ -49,7 +49,7 @@ if {$func == 0} {
 }
 
 check_design
-create_clock clk -name ideal_clock1 -period 1.25
+create_clock clk -name ideal_clock1 -period 1.2
 compile
 
 write -format verilog -hierarchy -output post-synth.v

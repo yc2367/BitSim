@@ -127,7 +127,6 @@ module mac_unit_Wave_16
 
 		for (j=0; j<VEC_LENGTH/16; j=j+1) begin
 			assign psum_total = psum_3[2*j] + psum_3[2*j+1];
-
 		end
 	endgenerate
 
