@@ -1,23 +1,19 @@
 `ifndef __mac_unit_Wave_16_V__
 `define __mac_unit_Wave_16_V__
 
-`include "max_comparator.v"
 
 module pos_neg_select #(
 	parameter DATA_WIDTH = 8
 ) (
 	input  logic signed [DATA_WIDTH-1:0] in,
 	input  logic                         sign,	
-	output logic signed [DATA_WIDTH:0]   out
+	output logic signed [DATA_WIDTH-1:0] out
 ); 
-	logic signed [DATA_WIDTH:0] in_extended;
-	assign in_extended = {in[DATA_WIDTH-1], in};
-
 	always_comb begin
 		if (sign) begin
-			out = ~in_extended + 1'b1;
+			out = ~in + 1'b1;
 		end else begin
-			out = in_extended;
+			out = in;
 		end
 	end
 endmodule
@@ -54,7 +50,7 @@ endmodule
 
 module shifter #(
 	parameter IN_WIDTH  = 12,
-	parameter OUT_WIDTH = IN_WIDTH + 7
+	parameter OUT_WIDTH = IN_WIDTH + 6
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic        [2:0]           shift_sel,	
@@ -87,72 +83,63 @@ module mac_unit_Wave_16
 	input  logic                             reset,
 	input  logic                             en,
 	input  logic                             load_accum,
-	input  logic                             is_pooling,
 
 	input  logic signed [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0], 
 	input  logic                             sign     [VEC_LENGTH-1:0],
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
 	input  logic        [2:0]                column_idx,
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
 	genvar j;
 
-	logic signed [DATA_WIDTH:0]  act_out    [VEC_LENGTH-1:0] ;
-	logic signed [DATA_WIDTH:0]  bs_mul_out [VEC_LENGTH-1:0] ;
+	logic signed [DATA_WIDTH-1:0]  act_out    [VEC_LENGTH-1:0] ;
+	logic signed [DATA_WIDTH-1:0]  bs_mul_out [VEC_LENGTH-1:0] ;
 	generate
 		for (j=0; j<VEC_LENGTH; j=j+1) begin
 			pos_neg_select #(DATA_WIDTH) select_1 (
 				.in(act_in[j]), .sign(sign[j]), .out(act_out[j])
 			);
-			value_select #(DATA_WIDTH+1) select_2 (
+			value_select #(DATA_WIDTH) select_2 (
 				.in(act_out[j]), .w_bit(w_bit[j]), .out(bs_mul_out[j])
 			);
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+1:0]  psum_1 [VEC_LENGTH/2-1:0];
-	logic signed [DATA_WIDTH+2:0]  psum_2 [VEC_LENGTH/4-1:0];
-	logic signed [DATA_WIDTH+3:0]  psum_3 [VEC_LENGTH/8-1:0];
-	logic signed [DATA_WIDTH+4:0]  psum_total ;
+	logic signed [DATA_WIDTH+0:0]  psum_1 [VEC_LENGTH/2-1:0];
+	logic signed [DATA_WIDTH+1:0]  psum_2 [VEC_LENGTH/4-1:0];
+	logic signed [DATA_WIDTH+2:0]  psum_3 [VEC_LENGTH/8-1:0];
+	logic signed [DATA_WIDTH+3:0]  psum_total ;
 
 	generate
 		for (j=0; j<VEC_LENGTH/2; j=j+1) begin
-			adder #(DATA_WIDTH+1, DATA_WIDTH+2) adder_1 (
-				.in_1(bs_mul_out[2*j]), .in_2(bs_mul_out[2*j+1]), .out(psum_1[j])
-			);
+			assign psum_1[j] = bs_mul_out[2*j] + bs_mul_out[2*j+1];
 		end
 
 		for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-			adder #(DATA_WIDTH+2, DATA_WIDTH+3) adder_2 (
-				.in_1(psum_1[2*j]), .in_2(psum_1[2*j+1]), .out(psum_2[j])
-			);
+			assign psum_2[j] = psum_1[2*j] + psum_1[2*j+1];
 		end
 
 		for (j=0; j<VEC_LENGTH/8; j=j+1) begin
-			adder #(DATA_WIDTH+3, DATA_WIDTH+4) adder_3 (
-				.in_1(psum_2[2*j]), .in_2(psum_2[2*j+1]), .out(psum_3[j])
-			);
+			assign psum_3[j] = psum_2[2*j] + psum_2[2*j+1];
 		end
 
 		for (j=0; j<VEC_LENGTH/16; j=j+1) begin
-			adder #(DATA_WIDTH+4, DATA_WIDTH+5) adder_4 (
-				.in_1(psum_3[2*j]), .in_2(psum_3[2*j+1]), .out(psum_total)
-			);
+			assign psum_total = psum_3[2*j] + psum_3[2*j+1];
+
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+11:0]  shifted_psum, shifted_psum_reg;
-	shifter #(.IN_WIDTH(DATA_WIDTH+5), .OUT_WIDTH(DATA_WIDTH+12)) shift (
+	logic signed [DATA_WIDTH+9:0]  shifted_psum, shifted_psum_reg;
+	shifter #(.IN_WIDTH(DATA_WIDTH+4), .OUT_WIDTH(DATA_WIDTH+10)) shift (
 		.in(psum_total), .shift_sel(column_idx), .out(shifted_psum)
 	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
-	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
 		if (load_accum) begin
-			accum_in = {result_prev, {PAD_WIDTH{1'b0}}};
+			accum_in = accum_prev;
 		end else begin
 			accum_in = accum_out;
 		end
@@ -161,24 +148,15 @@ module mac_unit_Wave_16
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
+			shifted_psum_reg <= 0;
 		end else if	(en) begin
 			shifted_psum_reg <= shifted_psum;
 			accum_out <= shifted_psum_reg + accum_in;
 		end
 	end
 
-	logic signed [RESULT_WIDTH-1:0] comp_result;
-	max_comparator #(RESULT_WIDTH) comp (
-		.in_1(accum_out[ACC_WIDTH-1:ACC_WIDTH-16]), .in_2(result_prev), .out(comp_result)
-	);
+	assign result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
 
-	always_comb begin
-		if (is_pooling) begin
-			result = comp_result;
-		end else begin
-			result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
-		end
-	end
 endmodule
 
 
@@ -193,13 +171,12 @@ module mac_unit_Wave_16_clk
 	input  logic                             reset,
 	input  logic                             en,
 	input  logic                             load_accum,
-	input  logic                             is_pooling,
 
 	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
 	input  logic                             sign     [VEC_LENGTH-1:0],
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
 	input  logic        [2:0]                column_idx,
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
 );

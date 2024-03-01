@@ -1,7 +1,6 @@
 `ifndef __mac_unit_Stripes_8_V__
 `define __mac_unit_Stripes_8_V__
 
-`include "max_comparator.v"
 
 module pos_neg_select #(
 	parameter DATA_WIDTH = 8
@@ -37,6 +36,30 @@ module value_select #(
 endmodule
 
 
+module shifter_3bit #(
+	parameter IN_WIDTH  = 12,
+	parameter OUT_WIDTH = 19
+) (
+	input  logic signed [IN_WIDTH-1:0]  in,
+	input  logic        [2:0]           shift_sel,	
+	output logic signed [OUT_WIDTH-1:0] out
+);
+	always_comb begin 
+		case (shift_sel)
+			3'b000 : out = in;
+			3'b001 : out = in <<< 1;
+			3'b010 : out = in <<< 2;
+			3'b011 : out = in <<< 3;
+			3'b100 : out = in <<< 4;
+			3'b101 : out = in <<< 5;
+			3'b110 : out = in <<< 6;
+			3'b111 : out = in <<< 7;
+			default: out = {OUT_WIDTH{1'bx}};
+		endcase
+	end
+endmodule
+
+
 module mac_unit_Stripes_8
 #(
     parameter DATA_WIDTH    = 8,
@@ -47,13 +70,14 @@ module mac_unit_Stripes_8
 	input  logic                             clk,
 	input  logic                             reset,
 	input  logic                             en,
-	input  logic                             is_pooling,
+	input  logic                             load_accum,
 
 	input  logic signed [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0], 
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
+
+	input  logic        [2:0]                column_idx,    // current column index for shifting 
 	input  logic                             is_msb,
-	input  logic                             delayed_is_msb,
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
@@ -85,40 +109,35 @@ module mac_unit_Stripes_8
 		end
 	endgenerate
 
-	logic signed [DATA_WIDTH+2:0]  psum_total_true, psum_total_true_reg;
-	pos_neg_select #(DATA_WIDTH+3) twos_complement (.in(psum_total), .sign(is_msb), .out(psum_total_true));
+
+	logic signed [DATA_WIDTH+2:0]  psum_act_shift_in;
+	logic signed [DATA_WIDTH+9:0]  psum_act_shift_out, psum_act_shift_reg;;
+	pos_neg_select #(DATA_WIDTH+3) twos_complement (.in(psum_total), .sign(is_msb), .out(psum_act_shift_in));
+	shifter_3bit #(.IN_WIDTH(DATA_WIDTH+3), .OUT_WIDTH(DATA_WIDTH+10)) shift_psum (
+		.in(psum_act_shift_in), .shift_sel(column_idx), .out(psum_act_shift_out)
+	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
-	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
-		if (delayed_is_msb) begin
-			accum_in = result_prev;
+		if (load_accum) begin
+			accum_in = accum_prev;
 		end else begin
-			accum_in = accum_out <<< 1;
+			accum_in = accum_out;
 		end
 	end
 
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
+			psum_act_shift_reg <= 0;
 		end else if	(en) begin
-			psum_total_true_reg <= psum_total_true;
-			accum_out <= psum_total_true_reg + accum_in;
+			psum_act_shift_reg <= psum_act_shift_out;
+			accum_out <= psum_act_shift_reg + accum_in;
 		end
 	end
 
-	logic signed [RESULT_WIDTH-1:0] comp_result;
-	max_comparator #(RESULT_WIDTH) comp (
-		.in_1(accum_out[ACC_WIDTH-1:ACC_WIDTH-16]), .in_2(result_prev), .out(comp_result)
-	);
+	assign result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
 
-	always_comb begin
-		if (is_pooling) begin
-			result = comp_result;
-		end else begin
-			result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
-		end
-	end
 endmodule
 
 
@@ -132,13 +151,14 @@ module mac_unit_Stripes_8_clk
 	input  logic                             clk,
 	input  logic                             reset,
 	input  logic                             en,
-	input  logic                             is_pooling,
-
+	input  logic                             load_accum,
+	
 	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
 	input  logic                             w_bit    [VEC_LENGTH-1:0],
+
+	input  logic        [2:0]                column_idx,    // current column index for shifting 
 	input  logic                             is_msb,
-	input  logic                             delayed_is_msb,
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
 );

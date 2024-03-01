@@ -1,8 +1,7 @@
 `ifndef __mac_unit_Vert_16_V__
 `define __mac_unit_Vert_16_V__
 
-`include "mux_9to1.v"
-`include "max_comparator.v"
+`include "mux_5to1.v"
 
 
 module pos_neg_select #(
@@ -52,15 +51,25 @@ module shifter_constant #( // can only shift 3-bit or no shift
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
 	input  logic                        is_shift,	
+	input  logic                        en,		
 	output logic signed [OUT_WIDTH-1:0] out
 );
+	logic signed [OUT_WIDTH-1:0] out_tmp;
 	always_comb begin 
 		if (is_shift) begin
-			out = in <<< 3;
+			out_tmp = in <<< 3;
 		end else begin 
-			out = in;
+			out_tmp = in;
 		end
 	end
+
+	 always_comb begin
+        if ( en ) begin
+            out = out_tmp;
+        end else begin
+            out = 0;
+        end
+    end
 endmodule
 
 
@@ -68,7 +77,7 @@ module mac_unit_Vert_16
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH) + 1,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
 	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
@@ -80,17 +89,18 @@ module mac_unit_Vert_16
 
 	input  logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
 	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
-	input  logic                               is_pooling,    
+	input  logic                               en_mul,        // specify whether enable 3-bit constant multiplier
 	input  logic                               is_msb,        // specify if the current column is MSB
 	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
 	
-	input  logic signed   [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed   [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed   [RESULT_WIDTH-1:0]   result
 );
 	genvar i, j;
@@ -100,8 +110,8 @@ module mac_unit_Vert_16
 	generate
 		for (i=0; i<VEC_LENGTH/8; i=i+1) begin
 			for (j=0; j<VEC_LENGTH/4; j=j+1) begin
-				mux_9to1 #(DATA_WIDTH) mux_act (
-					.vec(act_in[8*i+7:8*i]), .sel(act_sel[4*i+j]), .out(adder_in[4*i+j])
+				mux_5to1 #(DATA_WIDTH) mux_act (
+					.vec(act_in[8*i+j+4:8*i+j]), .sel(act_sel[4*i+j]), .val(act_val[4*i+j]), .out(adder_in[4*i+j])
 				);
 			end
 		end
@@ -144,48 +154,36 @@ module mac_unit_Vert_16
 	);
 
 	logic signed [PSUM_ACT_WIDTH-1:0]  sum_act_total;
+	assign sum_act_total = sum_act[0] + sum_act[1];
+
 	logic signed [PSUM_ACT_WIDTH+1:0]  mul_result;
 	logic signed [PSUM_ACT_WIDTH+4:0]  mul_result_true;
-	assign sum_act_total = sum_act[0] + sum_act[1];
 	assign mul_result = sum_act_total * mul_const;
 	shifter_constant #(.IN_WIDTH(PSUM_ACT_WIDTH+2), .OUT_WIDTH(PSUM_ACT_WIDTH+5)) shift_mul (
-		.in(mul_result), .is_shift(is_shift_mul), .out(mul_result_true)
+		.in(mul_result), .is_shift(is_shift_mul), .en(en_mul), .out(mul_result_true)
 	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
-	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
 		if (load_accum) begin
-			accum_in = {result_prev, {PAD_WIDTH{1'b0}}};
+			accum_in = accum_prev;
 		end else begin
 			accum_in = accum_out;
 		end
 	end
 	
-	logic signed [PSUM_ACT_WIDTH+4:0] mul_result_true_reg;
 	logic signed [PSUM_ACT_WIDTH+6:0] psum_act_shift_reg;
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
+			psum_act_shift_reg  <= 0;
 		end else if	(en) begin
-			mul_result_true_reg <= mul_result_true;
 			psum_act_shift_reg  <= psum_act_shift_out;
-			accum_out           <= mul_result_true_reg + psum_act_shift_reg + accum_in;
+			accum_out           <= mul_result_true + psum_act_shift_reg + accum_in;
 		end
 	end
 
-	logic signed [RESULT_WIDTH-1:0] comp_result;
-	max_comparator #(RESULT_WIDTH) comp (
-		.in_1(accum_out[ACC_WIDTH-1:ACC_WIDTH-16]), .in_2(result_prev), .out(comp_result)
-	);
-
-	always_comb begin
-		if (is_pooling) begin
-			result = comp_result;
-		end else begin
-			result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
-		end
-	end
+	assign result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
 endmodule
 
 
@@ -193,7 +191,7 @@ module mac_unit_Vert_16_clk
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
-	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH) + 1,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
 	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
@@ -205,17 +203,18 @@ module mac_unit_Vert_16_clk
 
 	input  logic signed   [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
 	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
-	input  logic                               is_pooling,    
+	input  logic                               en_mul,        // specify whether enable 3-bit constant multiplier
 	input  logic                               is_msb,        // specify if the current column is MSB
 	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
 	
-	input  logic signed   [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed   [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed   [RESULT_WIDTH-1:0]   result
 );
 	genvar i, j;

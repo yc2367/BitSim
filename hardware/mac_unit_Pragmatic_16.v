@@ -1,7 +1,6 @@
 `ifndef __mac_unit_Pragmatic_16_V__
 `define __mac_unit_Pragmatic_16_V__
 
-`include "max_comparator.v"
 
 module pos_neg_select #(
 	parameter DATA_WIDTH = 8
@@ -95,7 +94,6 @@ module mac_unit_Pragmatic_16
 	input  logic                             reset,
 	input  logic                             en,
 	input  logic                             load_accum,
-	input  logic                             is_pooling,
 
 	input  logic signed [DATA_WIDTH-1:0]     act_in         [VEC_LENGTH-1:0], 
 	input  logic        [1:0]                shift_1st_sel  [VEC_LENGTH-1:0],
@@ -104,7 +102,7 @@ module mac_unit_Pragmatic_16
 	input  logic                             shift_2nd_en,  // whether enable 2nd-stage shifter
 	input  logic                             is_neg         [VEC_LENGTH-1:0],
 
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
 	genvar j;
@@ -150,10 +148,9 @@ module mac_unit_Pragmatic_16
 	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
-	localparam PAD_WIDTH = ACC_WIDTH - RESULT_WIDTH;
 	always_comb begin
 		if (load_accum) begin
-			accum_in = {result_prev, {PAD_WIDTH{1'b0}}};
+			accum_in = accum_prev;
 		end else begin
 			accum_in = accum_out;
 		end
@@ -163,24 +160,15 @@ module mac_unit_Pragmatic_16
 	always @(posedge clk) begin
 		if (reset) begin
 			accum_out <= 0;
+			psum_total_reg <= 0;
 		end else if	(en) begin
 			psum_total_reg <= psum_total;
 			accum_out <= psum_total_reg + accum_in;
 		end
 	end
 
-	logic signed [RESULT_WIDTH-1:0] comp_result;
-	max_comparator #(RESULT_WIDTH) comp (
-		.in_1(accum_out[ACC_WIDTH-1:ACC_WIDTH-16]), .in_2(result_prev), .out(comp_result)
-	);
+	assign result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
 
-	always_comb begin
-		if (is_pooling) begin
-			result = comp_result;
-		end else begin
-			result = accum_out[ACC_WIDTH-1:ACC_WIDTH-16];
-		end
-	end
 endmodule
 
 
@@ -195,7 +183,6 @@ module mac_unit_Pragmatic_16_clk
 	input  logic                             reset,
 	input  logic                             en,
 	input  logic                             load_accum,
-	input  logic                             is_pooling,
 
 	input  logic signed [DATA_WIDTH-1:0]     act            [VEC_LENGTH-1:0], 
 	input  logic        [1:0]                shift_1st_sel  [VEC_LENGTH-1:0],
@@ -204,7 +191,7 @@ module mac_unit_Pragmatic_16_clk
 	input  logic                             shift_2nd_en,  // whether enable 2nd-stage shifter
 	input  logic                             is_neg         [VEC_LENGTH-1:0],
 
-	input  logic signed [RESULT_WIDTH-1:0]   result_prev,
+	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
 	genvar j;
