@@ -21,6 +21,8 @@ def int_to_2s_complement(value: int, bitwidth: int):
 
 
 def int_to_sign_magnitude(value: int, bitwidth: int):
+  if value == -128:
+    value = -127
   bin_list = []
   if value >= 0:
     bin_list.append('0')

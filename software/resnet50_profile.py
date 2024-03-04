@@ -15,6 +15,7 @@ name_list   = []
 for n, m in model.named_modules():
     if hasattr(m, "weight"):
         w = m.weight()
+        print(m)
         wint = torch.int_repr(w)
         weight_list.append(wint)
         name_list.append(n)
