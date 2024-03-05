@@ -1,5 +1,5 @@
-`ifndef __mac_unit_Vert_16_V__
-`define __mac_unit_Vert_16_V__
+`ifndef __mac_unit_Vert_16_small_mul_V__
+`define __mac_unit_Vert_16_small_mul_V__
 
 `include "mux_5to1.v"
 
@@ -44,26 +44,37 @@ module shifter_3bit #(
 endmodule
 
 
-module shifter_constant #( // can shift 3-bit or no shift
+module shifter_mul #(
 	parameter IN_WIDTH  = 12,
 	parameter OUT_WIDTH = IN_WIDTH + 3
 ) (
 	input  logic signed [IN_WIDTH-1:0]  in,
-	input  logic                        is_shift,	
+	input  logic        [1:0]           shift_sel,	
+	input  logic                        en,		
 	output logic signed [OUT_WIDTH-1:0] out
 );
 	logic signed [OUT_WIDTH-1:0] out_tmp;
 	always_comb begin 
-		if (is_shift) begin
-			out_tmp = in <<< 3;
-		end else begin 
-			out_tmp = in;
-		end
+		case (shift_sel)
+			2'b00 : out_tmp = in;
+			2'b01 : out_tmp = in <<< 1;
+			2'b10 : out_tmp = in <<< 2;
+			2'b11 : out_tmp = in <<< 3;
+			default: out_tmp = {OUT_WIDTH{1'bx}};
+		endcase
 	end
+
+	always_comb begin
+        if ( en ) begin
+            out = out_tmp;
+        end else begin
+            out = 0;
+        end
+    end
 endmodule
 
 
-module mac_unit_Vert_16
+module mac_unit_Vert_16_small_mul
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
@@ -82,10 +93,10 @@ module mac_unit_Vert_16
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
+	input  logic unsigned 	                   mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
-	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
+	input  logic          [1:0]                shift_mul_sel, // specify whether shift the 3-bit constant multiplier
 	input  logic                               en_mul,        // specify whether enable 3-bit constant multiplier
 	input  logic                               is_msb,        // specify if the current column is MSB
 	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
@@ -157,12 +168,12 @@ module mac_unit_Vert_16
 	endgenerate
 	
 	logic signed [PSUM_ACT_WIDTH-1:0]  sum_act_total;
-	logic signed [PSUM_ACT_WIDTH+1:0]  mul_result;
-	logic signed [PSUM_ACT_WIDTH+4:0]  mul_result_true;
+	logic signed [PSUM_ACT_WIDTH-1:0]  mul_result;
+	logic signed [PSUM_ACT_WIDTH+2:0]  mul_result_true;
 	assign sum_act_total = sum_act_tmp[0] + sum_act_tmp[1];
 	assign mul_result = sum_act_total * mul_const;
-	shifter_constant #(.IN_WIDTH(PSUM_ACT_WIDTH+2), .OUT_WIDTH(PSUM_ACT_WIDTH+5)) shift_mul (
-		.in(mul_result), .is_shift(is_shift_mul), .out(mul_result_true)
+	shifter_mul #(.IN_WIDTH(PSUM_ACT_WIDTH), .OUT_WIDTH(PSUM_ACT_WIDTH+3)) shift_mul (
+		.in(mul_result), .shift_sel(shift_mul_sel), .en(en_mul), .out(mul_result_true)
 	);
 
 	logic signed [ACC_WIDTH-1:0]  accum_in, accum_out;
@@ -189,7 +200,7 @@ module mac_unit_Vert_16
 endmodule
 
 
-module mac_unit_Vert_16_clk
+module mac_unit_Vert_16_small_mul_clk
 #(
     parameter DATA_WIDTH    = 8,
 	parameter VEC_LENGTH    = 16,
@@ -208,10 +219,10 @@ module mac_unit_Vert_16_clk
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic unsigned [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
+	input  logic unsigned 	                   mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
-	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
+	input  logic          [1:0]                shift_mul_sel, // specify whether shift the 3-bit constant multiplier
 	input  logic                               en_mul,        // specify whether enable 3-bit constant multiplier
 	input  logic                               is_msb,        // specify if the current column is MSB
 	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
@@ -234,7 +245,7 @@ module mac_unit_Vert_16_clk
 	end
 	endgenerate
 
-	mac_unit_Vert_16 #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
+	mac_unit_Vert_16_small_mul #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
 
 `endif 

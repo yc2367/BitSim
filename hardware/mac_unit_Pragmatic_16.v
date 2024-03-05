@@ -198,15 +198,15 @@ module mac_unit_Pragmatic_16_clk
 	
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
 	generate
-	for (j=0; j<VEC_LENGTH; j=j+1) begin
-		always @(posedge clk) begin
-			if (reset) begin
-				act_in[j] <= 0;
-			end else begin
-				act_in[j] <= act[j];
+		for (j=0; j<VEC_LENGTH; j=j+1) begin
+			always @(posedge clk) begin
+				if (reset) begin
+					act_in[j] <= 0;
+				end else begin
+					act_in[j] <= act[j];
+				end
 			end
 		end
-	end
 	endgenerate
 
 	mac_unit_Pragmatic_16 #(DATA_WIDTH, VEC_LENGTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
