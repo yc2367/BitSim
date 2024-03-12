@@ -19,12 +19,12 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 16
+GROUP_SIZE = 8
 w_bitwidth = 8
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    file = open(f'resnet18_bit_count_group_{GROUP_SIZE}.txt', 'w')
+    file = open(f'resnet18_bit_count_msb_clipping_group_{GROUP_SIZE}.txt', 'w')
     sparse_bit_count_baseline = 0
     sparse_bit_count_skip_01 = 0
     sparse_bit_count_skip_01_msb = 0

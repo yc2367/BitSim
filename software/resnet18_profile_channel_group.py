@@ -9,18 +9,23 @@ model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWei
 
 model = model.cpu()
 
-weight_list = []
-name_list   = []
 
+count = 0
+layer_num = 5
 for n, m in model.named_modules():
     if hasattr(m, "weight"):
-        w = m.weight()
         print(m)
-        wint = torch.int_repr(w)
-        weight_list.append(wint)
-        name_list.append(n)
 
-weight_test = weight_list[6]
+print('\n')
+for n, m in model.named_modules():
+    if hasattr(m, "weight"):
+        if count == layer_num:
+            w = m.weight()
+            print(m)
+            wint = torch.int_repr(w)
+            weight_test = wint
+        count += 1
+
 print(weight_test.shape)
 CHANNEL_GROUP_SIZE = 1
 
@@ -61,6 +66,7 @@ def main():
             f.writelines(s + '\n')
             f.writelines(f'count 1st MSB: {count_1} \n')
             f.writelines(f'count 2nd MSB: {count_2} \n')
+            f.writelines(f'count total: {weight_test.shape[3] * weight_test.shape[2] * weight_test.shape[1]} \n')
             f.writelines('\n\n')
         f.writelines(f'count MSB grounp size: {g_count_1} \n')
         f.writelines('\n\n')

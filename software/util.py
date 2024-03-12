@@ -444,11 +444,8 @@ def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cp
                         else:
                             break
                     bit_one_count = torch.sum(group_qb[msb_idx:int(w_bitwidth), :], dim=1)
-                    #print('a', bit_one_count)
                     skip_zero = bit_one_count.lt(group_size/2)
-                    #print('b', skip_zero)
                     bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
-                    #print('c', bit_one_count)
                     sparse_bit_count += (torch.sum(bit_one_count) + group_size*msb_idx)
     total_bit_count = K * C * W * H * w_bitwidth
     return sparse_bit_count, total_bit_count
