@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import math
-from util import *
+from util.process_layer import *
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -52,7 +52,7 @@ def main():
             f.fig.suptitle(str(i) + '  ' +str(name_list[i]))
             f.savefig(f'./plot/{name_list[i]}_original.png')
 
-            for func in [0, 1]:
+            for func in [0, 1, 2]:
                 if func == 0:
                     format = 'Sign Magnitude'
                     if len(weight_test.shape) == 4:
@@ -61,7 +61,7 @@ def main():
                     elif len(weight_test.shape) == 2:
                         weight_test_new = process_signMagnitude_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                 pruned_column_num=pruned_column_num, device=device)
-                else:
+                elif func == 1:
                     format = '2s Complement'
                     if len(weight_test.shape) == 4:
                         weight_test_new = process_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
@@ -71,6 +71,15 @@ def main():
                         weight_test_new = process_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     pruned_column_num=pruned_column_num, device=device,
                                                                     h_distance_target=hamming_distance)
+                else:
+                    format = 'ZP Preserve'
+                    weight_test = weight_test.to(torch.float32)
+                    if len(weight_test.shape) == 4:
+                        weight_test_new = process_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    pruned_column_num=pruned_column_num, device=device)
+                    elif len(weight_test.shape) == 2:
+                        weight_test_new = process_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    pruned_column_num=pruned_column_num, device=device)
                 #print(weight_test_new.unique())
 
                 # plot distribution

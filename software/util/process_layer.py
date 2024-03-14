@@ -51,8 +51,7 @@ def process_zeroPoint_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_nu
             for h in range(H):  # kernel height
                 for c in range(C // group_size):  # input channel 
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
-                    group_q_new = search_zeroPoint(group_q, w_bitwidth=w_bitwidth, 
-                                                          zero_column_required=pruned_column_num)
+                    group_q_new = search_zeroPoint(group_q, w_bitwidth=w_bitwidth, zero_column_required=pruned_column_num)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
@@ -68,9 +67,7 @@ def process_zeroPoint_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=
     for k in range(K):  # output channel
         for c in range(C // group_size):  # input channel 
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
-            group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size]
-            group_q_new = search_zeroPoint(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                  zero_column_required=pruned_column_num)
+            group_q_new = search_zeroPoint(group_q, w_bitwidth=w_bitwidth, zero_column_required=pruned_column_num)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
 
