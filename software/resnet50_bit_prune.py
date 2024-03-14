@@ -24,12 +24,12 @@ w_bitwidth = 8
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hamming_distance = 2.5
-    for N in range(2, 7):
+    hamming_distance = 0.5
+    for N in range(6, 7):
         pruned_column_num = N
         file = open(f'resnet50_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
 
-        for i in range(40, 54):
+        for i in range(10, 54):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')

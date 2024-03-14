@@ -171,7 +171,6 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
     # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
     column_test = group_binary[test_until:]
     int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until)
-    #print(prune_until, test_until)
     int_test_new = torch.zeros_like(int_test)
 
     for i, value in enumerate(int_test.tolist()):
@@ -180,12 +179,11 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
         for n in range(2**(prune_until-test_until)):
             tmp_value = n * 2.**(w_bitwidth-prune_until)
             new_error = ((tmp_value - value)**2)
-            #print('new error', new_error)
             if new_error < error:
-                #print(tmp_value)
                 error = new_error
-                #print(error)
                 new_value = tmp_value
+            else:
+                break
 
         int_test_new[i] = new_value
 
@@ -198,6 +196,230 @@ def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=
     else:
         return group_int_new
 
+
+def bitFlip_signMagnitude_new(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+    '''
+    Apply bit-flip to a group of quantized weights in sign-magnitude format
+    '''
+    group_binary = group_qb.clone()
+    # check existing zero columns
+    zero_column_idx = [1e3]
+    for i in range(1, int(w_bitwidth)):
+        if torch.sum(group_qb[i]) == 0:
+            zero_column_idx.append(i)
+            zero_column_required -= 1
+        else:
+            break
+    
+    # prune_until is a pointer to specify which column to prune until
+    # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
+    # if require 4 zero columns, then we should prune from column 7 until column 4 
+    prune_until = w_bitwidth - zero_column_required 
+    
+    # no need to prune
+    if zero_column_required <= 0: 
+        if return_binary:
+            return group_binary
+        else:
+            return group_q
+    
+    # continue
+    # test_until is a pointer to specify which column to test until
+    zero_column_idx = [idx if idx < prune_until else 0 for idx in zero_column_idx]
+    test_until = max(zero_column_idx) + 1
+    
+    # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+    # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+    column_test = group_binary[test_until:]
+    int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until)
+    int_test_new = torch.zeros_like(int_test)
+
+    for i, value in enumerate(int_test.tolist()):
+        new_value = 0
+        error = 1e7
+        for n in range(2**(prune_until-test_until)):
+            tmp_value = n * 2.**(w_bitwidth-prune_until)
+            new_error = ((tmp_value - value)**2)
+            if new_error < error:
+                error = new_error
+                new_value = tmp_value
+            else:
+                break
+
+        int_test_new[i] = new_value
+
+    column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-test_until)
+    group_binary[test_until:] = column_test_new
+    group_int_new = signMagnitude_to_int(group_binary, w_bitwidth=w_bitwidth)
+
+    if return_binary:
+        return group_binary
+    else:
+        return group_int_new
+    
+
+def zeroPoint_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+    # check existing zero columns
+    v_max = 2**(w_bitwidth-1) - 1
+    v_min = -v_max
+    group_q = group_q.to(float)
+    error = 1e7
+    group_int_opt = torch.zeros_like(group_q)
+    #group_int_offset = torch.zeros_like(group_q)
+    #offset_opt = 0
+    for o in range(-8, 7):
+        offset = float(o)
+        group_q_new = group_q + offset
+        group_q_new[group_q_new.lt(v_min)] = v_min
+        group_q_new[group_q_new.gt(v_max)] = v_max
+        group_qb_new = int_to_signMagnitude(group_q_new, w_bitwidth=w_bitwidth)
+        group_int_new = bitFlip_signMagnitude_new(group_q_new, group_qb_new, w_bitwidth, 
+                                              zero_column_required)
+        group_int_new_true = group_int_new - offset 
+        group_int_new_true[group_int_new_true.lt(v_min)] = v_min
+        group_int_new_true[group_int_new_true.gt(v_max)] = v_max
+        new_error = torch.sum((group_int_new_true - group_q)**2)
+        if new_error < error:
+            error = new_error
+            group_int_opt = group_int_new_true
+            #offset_opt = offset
+            #group_int_offset = group_int_new
+        else:
+            break
+    if False:
+        print(group_q)
+        print(group_int_offset)
+        print(group_int_opt)
+        print(offset_opt)
+        print()
+    return group_int_opt
+    
+
+def zeroPoint_signMagnitude_bad(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+    group_binary = group_qb.clone()
+    # check existing zero columns
+    zero_column_idx = [1e3]
+    for i in range(1, int(w_bitwidth)):
+        if torch.sum(group_qb[i]) == 0:
+            zero_column_idx.append(i)
+        else:
+            break
+    
+    # prune_until is a pointer to specify which column to prune until
+    # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
+    # if require 4 zero columns, then we should prune from column 7 until column 4 
+    prune_until = w_bitwidth - zero_column_required 
+
+    # cHeck if there are zero columns before prune_until
+    for idx in zero_column_idx:
+        if idx < prune_until:
+            zero_column_required -= 1
+            prune_until += 1
+    
+    # no need to prune
+    if zero_column_required <= 0: 
+        if return_binary:
+            return group_binary
+        else:
+            return group_q
+    
+    # continue
+    # test_until is a pointer to specify which column to test until
+    group_q = group_q.to(float)
+    group_zero_point = torch.round(torch.mean(group_q))
+    group_offset = group_q - group_zero_point
+    group_offset_b = int_to_signMagnitude(group_offset, w_bitwidth=w_bitwidth)
+    group_offset_new = bitFlip_signMagnitude(group_offset, group_offset_b, w_bitwidth=8, zero_column_required=zero_column_required)
+    group_int_new = group_offset_new + group_zero_point
+    '''
+    group_int_new_new = bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=zero_column_required)
+    if torch.sum((group_int_new_new - group_q)**2) <  torch.sum((group_int_new - group_q)**2):
+        print(group_q)
+        print(group_int_new_new)
+        print(group_int_new)
+        print()
+        
+    if False:
+        print(group_q)
+        print(group_zero_point)
+        print(group_offset)
+        print(group_offset_new)
+        print(group_int_new)
+        print()
+    '''
+    if return_binary:
+        return group_binary
+    else:
+        return group_int_new
+    
+
+def zeroPoint_signMagnitude_old(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):
+    '''
+    Apply bit-flip to a group of quantized weights in sign-magnitude format
+    '''
+    group_binary = group_qb.clone()
+    # check existing zero columns
+    zero_column_idx = [1e3]
+    for i in range(1, int(w_bitwidth)):
+        if torch.sum(group_qb[i]) == 0:
+            zero_column_idx.append(i)
+        else:
+            break
+    
+    # prune_until is a pointer to specify which column to prune until
+    # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
+    # if require 4 zero columns, then we should prune from column 7 until column 4 
+    prune_until = w_bitwidth - zero_column_required 
+
+    # cHeck if there are zero columns before prune_until
+    for idx in zero_column_idx:
+        if idx < prune_until:
+            zero_column_required -= 1
+            prune_until += 1
+    
+    # no need to prune
+    if zero_column_required <= 0: 
+        if return_binary:
+            return group_binary
+        else:
+            return group_q
+    
+    # continue
+    # test_until is a pointer to specify which column to test until
+    zero_column_idx = [idx if idx < prune_until else 0 for idx in zero_column_idx]
+    test_until = max(zero_column_idx) + 1
+    
+    # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+    # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+    column_test = group_binary[test_until:]
+    int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_until)
+    int_test_new = torch.zeros_like(int_test)
+
+    for i, value in enumerate(int_test.tolist()):
+        new_value = 0
+        error = 1e7
+        for n in range(2**(prune_until-test_until)):
+            tmp_value = n * 2.**(w_bitwidth-prune_until)
+            new_error = ((tmp_value - value)**2)
+            if new_error < error:
+                error = new_error
+                new_value = tmp_value
+            else:
+                break
+
+        int_test_new[i] = new_value
+
+    column_test_new = int_to_binary(int_test_new, w_bitwidth=w_bitwidth-test_until)
+    group_binary[test_until:] = column_test_new
+    group_int_new = signMagnitude_to_int(group_binary, w_bitwidth=w_bitwidth)
+    group_offset = torch.round(torch.mean(group_q - group_int_new))
+    group_int_new = group_int_new + group_offset
+    print(group_q)
+    if return_binary:
+        return group_binary
+    else:
+        return group_int_new
+    
 
 def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required=4, 
                            return_binary=False, h_distance_target=0):
@@ -301,6 +523,44 @@ def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_
             group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size]
             group_q_new = bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=w_bitwidth,
                                                 zero_column_required=pruned_column_num)
+            wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
+    return wq_int_new
+
+
+def process_zeroPoint_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    wqb_signMagnitude = wqb_signMagnitude.to('cpu')
+    wq_int_new = torch.zeros_like(wq_int)
+    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
+    if C < group_size:
+        group_size = C
+
+    for k in range(K):  # output channel
+        for w in range(W):  # kernel width
+            for h in range(H):  # kernel height
+                for c in range(C // group_size):  # input channel 
+                    group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
+                    group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size, w, h]
+                    group_q_new = zeroPoint_signMagnitude(group_q, group_qb, w_bitwidth=w_bitwidth, 
+                                                          zero_column_required=pruned_column_num)
+                    wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
+    return wq_int_new
+
+
+def process_zeroPoint_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    wqb_signMagnitude = wqb_signMagnitude.to('cpu')
+    wq_int_new = torch.zeros_like(wq_int)
+    K, C = wq_int.shape # output channel, input channel
+    if C < group_size:
+        group_size = C
+
+    for k in range(K):  # output channel
+        for c in range(C // group_size):  # input channel 
+            group_q = wq_int[k, c*group_size:(c+1)*group_size]
+            group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size]
+            group_q_new = zeroPoint_signMagnitude(group_q, group_qb, w_bitwidth=w_bitwidth,
+                                                  zero_column_required=pruned_column_num)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
 
@@ -474,3 +734,24 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
             sparse_bit_count += (torch.sum(bit_one_count) + group_size*msb_idx)
     total_bit_count = K * C * w_bitwidth
     return sparse_bit_count, total_bit_count
+
+
+def mse(a, b):
+    return torch.sum((a-b)**2)
+
+if __name__ == "__main__":
+    t = torch.tensor([  0.,  23., -29.,  -5., -11.,   0.,  -5., -29., -22.,  -5.,   3.,  21.,
+        -16., -40.,  -1.,  65.])
+    tbs = int_to_signMagnitude(t, 8)
+    tb2 = int_to_twosComplement(t, 8)
+    a = zeroPoint_signMagnitude(t, tbs, 8)
+    b = bitFlip_signMagnitude(t, tbs, 8)
+    c = bitFlip_twosComplement(t, tb2, 8)
+    print(a)
+    print(mse(a,t))
+    print(b)
+    print(mse(b,t))
+    print(c)
+    print(mse(c,t))
+
+    

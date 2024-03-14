@@ -1,6 +1,6 @@
 from typing import List, Dict
 import numpy as np
-from util import ArrayDimension
+from alu_util import ArrayDimension
 from alu import (
     OperationalUnit,
     Multiplier,
