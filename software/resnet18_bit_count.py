@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 import numpy as np
-from util import *
+from util.count_bit import *
 
 from torchvision.models.quantization import ResNet18_QuantizedWeights
 model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
@@ -38,20 +38,18 @@ def main():
             if func == 0:
                 format = 'Baseline skip 0'
                 if len(weight_test.shape) == 4:
-                    layer_sparse_bit, layer_total_bit = count_zero_bit_conv(weight_test, w_bitwidth=w_bitwidth, 
-                                                                        group_size=GROUP_SIZE, device=device)
+                    layer_sparse_bit, layer_total_bit = count_zero_bit_conv(weight_test, w_bitwidth=w_bitwidth, device=device)
                 elif len(weight_test.shape) == 2:
-                    layer_sparse_bit, layer_total_bit = count_zero_bit_fc(weight_test, w_bitwidth=w_bitwidth, 
-                                                                        group_size=GROUP_SIZE, device=device)
+                    layer_sparse_bit, layer_total_bit = count_zero_bit_fc(weight_test, w_bitwidth=w_bitwidth, device=device)
                 sparse_bit_count_baseline += layer_sparse_bit
                 total_bit_count_model += layer_total_bit
             else:
                 format = 'Proposed skip 1 or 0'
                 if len(weight_test.shape) == 4:
-                    layer_sparse_bit, _ = count_zero_bit_conv(weight_test, w_bitwidth=w_bitwidth, 
+                    layer_sparse_bit, _ = count_less_bit_conv(weight_test, w_bitwidth=w_bitwidth, 
                                                                         group_size=GROUP_SIZE, device=device)
                 elif len(weight_test.shape) == 2:
-                    layer_sparse_bit, _ = count_zero_bit_fc(weight_test, w_bitwidth=w_bitwidth, 
+                    layer_sparse_bit, _ = count_less_bit_fc(weight_test, w_bitwidth=w_bitwidth, 
                                                                         group_size=GROUP_SIZE, device=device)
                 sparse_bit_count_proposed += layer_sparse_bit
             
