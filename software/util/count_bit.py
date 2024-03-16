@@ -96,14 +96,12 @@ def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cp
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to(device)
 
-    msb_idx = torch.zeros([K, W, H, C//group_size]) # tensor to store msb index of all groups
-    msb_idx = msb_idx.to(device)
-    eq_msb_column = torch.ones([K, W, H, C//group_size])
-    eq_msb_column = eq_msb_column.to(device)
+    # tensor to store msb index of all groups
+    msb_idx = torch.zeros([K, W, H, C//group_size], device=device) 
+    eq_msb_column = torch.ones([K, W, H, C//group_size], device=device)
     for i in range(1, int(w_bitwidth)):
         eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
         eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
-        print(eq_msb_column.shape)
         msb_idx[eq_msb_column] += 1
     
     for i in range(1, int(w_bitwidth)):
@@ -127,14 +125,12 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to(device)
 
-    msb_idx = torch.zeros([K, C//group_size]) # tensor to store msb index of all groups
-    msb_idx = msb_idx.to(device)
-    eq_msb_column = torch.ones([K, C//group_size])
-    eq_msb_column = eq_msb_column.to(device)
+    # tensor to store msb index of all groups
+    msb_idx = torch.zeros([K, C//group_size], device=device) 
+    eq_msb_column = torch.ones([K, C//group_size], device=device)
     for i in range(1, int(w_bitwidth)):
         eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
         eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
-        print(eq_msb_column.shape)
         msb_idx[eq_msb_column] += 1
     
     for i in range(1, int(w_bitwidth)):

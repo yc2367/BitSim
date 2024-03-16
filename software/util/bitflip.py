@@ -114,7 +114,7 @@ def bitFlip_twosComplement(group_q, group_qb, w_bitwidth=8, zero_column_required
             return group_q
 
     # prune columns [prune_until:], we should test columns [prune_until:] to minimize MSE
-    # since the value should be the same for all weight columns [prune_until:] in a group, the value can be adjusted arbitrarily
+    # the value should be the same for all weight columns [prune_until:] in a group
     if prune_until == 1:
         int_test = twosComplement_to_int(group_binary, w_bitwidth=w_bitwidth)
         value_mean = torch.round(torch.mean(int_test))

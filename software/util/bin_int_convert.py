@@ -45,7 +45,7 @@ def int_to_twosComplement(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     
     weight_q_shape = torch.Tensor(list(weight_q.size()))
     bin_list_shape = torch.cat((torch.Tensor([w_bitwidth/cellBit]), weight_q_shape)).to(int).tolist()
-    remainder_list = torch.zeros(bin_list_shape, device=device).type_as(weight_q)
+    remainder_list = torch.zeros(bin_list_shape, device=device)
 
     for k in reversed(range(int(w_bitwidth/cellBit))):
         remainder = torch.fmod(weight_q, cellRange)
@@ -56,10 +56,10 @@ def int_to_twosComplement(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     return remainder_list
 
 
-def twosComplement_to_int(wqb_list, w_bitwidth=8):
+def twosComplement_to_int(wqb_list, w_bitwidth=8, device='cpu'):
     bin_list_shape = wqb_list.size()
     wq_list_shape = list(bin_list_shape[1:])
-    wq_list = torch.zeros(wq_list_shape)
+    wq_list = torch.zeros(wq_list_shape, device=device)
 
     for k in reversed(range(int(w_bitwidth))):
         if k != 0:
@@ -90,7 +90,6 @@ def binary_to_int(wqb_list, w_bitwidth=8, device='cpu'):
     bin_list_shape = wqb_list.size()
     wq_list_shape = list(bin_list_shape[1:])
     wq_list = torch.zeros(wq_list_shape, device=device)
-
     for k in reversed(range(int(w_bitwidth))):
         wq_list += (wqb_list[k] * 2.**(w_bitwidth-1-k))
     return wq_list

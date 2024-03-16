@@ -72,7 +72,7 @@ def process_zeroPoint_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=
     return wq_int_new
 
 
-def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, 
+def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, 
                                 device='cpu', h_distance_target=0):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to('cpu')
@@ -88,13 +88,13 @@ def process_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colu
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
                     group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size, w, h]
                     group_q_new = bitFlip_twosComplement(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                         zero_column_required=pruned_column_num, 
+                                                         zero_column_required=zero_column_required, 
                                                          h_distance_target=h_distance_target)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
 
-def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, 
+def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, 
                               device='cpu', h_distance_target=0):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_twosComplement = wqb_twosComplement.to('cpu')
@@ -108,7 +108,7 @@ def process_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
             group_qb = wqb_twosComplement[:, k, c*group_size:(c+1)*group_size]            
             group_q_new = bitFlip_twosComplement(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                 zero_column_required=pruned_column_num,
+                                                 zero_column_required=zero_column_required,
                                                  h_distance_target=h_distance_target)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
