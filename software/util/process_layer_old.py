@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from util.bit_flip import *
+from util.bitflip import *
 
-def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_signMagnitude = wqb_signMagnitude.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
@@ -17,12 +17,12 @@ def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, pruned_colum
                     group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
                     group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size, w, h]
                     group_q_new = bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                        zero_column_required=pruned_column_num)
+                                                        zero_column_required=zero_column_required)
                     wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
     return wq_int_new
 
 
-def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
+def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
     wqb_signMagnitude = wqb_signMagnitude.to('cpu')
     wq_int_new = torch.zeros_like(wq_int)
@@ -35,7 +35,7 @@ def process_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_
             group_q = wq_int[k, c*group_size:(c+1)*group_size]
             group_qb = wqb_signMagnitude[:, k, c*group_size:(c+1)*group_size]
             group_q_new = bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=w_bitwidth,
-                                                zero_column_required=pruned_column_num)
+                                                zero_column_required=zero_column_required)
             wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
     return wq_int_new
 
