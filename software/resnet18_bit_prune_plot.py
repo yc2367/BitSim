@@ -3,9 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import math
-from BitSim.software.util.bitflip_layer import *
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from util.bitflip_layer import *
 
 import warnings 
 warnings.filterwarnings("ignore")
@@ -37,11 +38,11 @@ else:
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    for N in range(4, 5):
-        pruned_column_num = N
-        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
+    for N in range(3, 4):
+        num_pruned_column = N
+        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(10, len(weight_list)):
+        for i in range(14, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')
@@ -56,30 +57,27 @@ def main():
                 if func == 0:
                     format = 'Sign Magnitude'
                     if len(weight_test.shape) == 4:
-                        weight_test_new = process_signMagnitude_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    pruned_column_num=pruned_column_num, device=device)
+                        weight_test_new = bitflip_signMagnitude_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
-                        weight_test_new = process_signMagnitude_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                pruned_column_num=pruned_column_num, device=device)
+                        weight_test_new = bitflip_signMagnitude_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                num_pruned_column=num_pruned_column, device=device)
                 elif func == 1:
                     format = '2s Complement'
                     if len(weight_test.shape) == 4:
-                        weight_test_new = process_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    pruned_column_num=pruned_column_num, device=device, 
-                                                                    h_distance_target=hamming_distance)
+                        weight_test_new = bitflip_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
-                        weight_test_new = process_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    pruned_column_num=pruned_column_num, device=device,
-                                                                    h_distance_target=hamming_distance)
+                        weight_test_new = bitflip_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    num_pruned_column=num_pruned_column, device=device)
                 else:
                     format = 'ZP Preserve'
-                    weight_test = weight_test.to(torch.float32)
                     if len(weight_test.shape) == 4:
-                        weight_test_new = process_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    pruned_column_num=pruned_column_num, device=device)
+                        weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
-                        weight_test_new = process_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    pruned_column_num=pruned_column_num, device=device)
+                        weight_test_new = bitflip_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                                    num_pruned_column=num_pruned_column, device=device)
                 #print(weight_test_new.unique())
 
                 # plot distribution

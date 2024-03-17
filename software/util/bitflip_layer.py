@@ -3,7 +3,8 @@ import torch.nn as nn
 from util.bin_int_convert import *
 
 
-def bitflip_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
+def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
+    wq_int = wq_int.to(device)
     K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
@@ -13,42 +14,42 @@ def bitflip_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
     # check existing zero columns
-    zero_column_mask = torch.zeros([w_bitwidth, K, W, H, C//group_size], device=device)
+    zero_column_mask = torch.zeros([w_bitwidth, K, W, H, C//group_size], dtype=torch.bool, device=device)
     for i in range(int(w_bitwidth)):
-        eq_zero = torch.eq(torch.sum(wqb_signMagnitude[i], dim=-1), 0.)
-        zero_column_mask[i][eq_zero] = 1
-
+        eq_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
+        zero_column_mask[i][eq_zero] = True
+    
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
     # if require 4 zero columns, then we should prune from column 7 until column 4 
-    prune_until = torch.full([K, W, H, C//group_size], w_bitwidth-zero_column_required, device=device)
-
+    prune_until = torch.full([K, W, H, C//group_size], w_bitwidth-num_pruned_column, device=device)
     # cHeck if there are zero columns before prune_until
     for i in range(1, int(w_bitwidth)):
-        mask = torch.logical_and(prune_until.gt(i), torch.eq(zero_column_mask[i], 1))
+        mask = torch.logical_and(prune_until.gt(i), zero_column_mask[i])
         prune_until[mask] += 1
     
     # test_until is a pointer to specify which column to test until
     test_until = torch.full([K, W, H, C//group_size], 1, device=device)
     for i in range(1, int(w_bitwidth)):
-        mask = torch.logical_and(prune_until.gt(i), torch.eq(zero_column_mask[i], 1))
+        mask = torch.logical_and(prune_until.gt(i), zero_column_mask[i])
         test_until[mask] = i + 1
     
     # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
     # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
     value_test = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    value_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+
     for test_idx in range(1, int(w_bitwidth)):
         mask = torch.eq(test_until, test_idx)
         column_test = wqb_signMagnitude[test_idx:, mask, :]
         int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_idx, device=device)
         value_test[mask] = int_test
     
-    value_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
-    for prune_idx in range(w_bitwidth-zero_column_required, w_bitwidth):
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
         for test_idx in range(1, prune_idx):
             mask_group = torch.logical_and(torch.eq(test_until, test_idx), torch.eq(prune_until, prune_idx))
             mask_group = mask_group.unsqueeze(-1).expand(-1, -1, -1, -1, group_size)
-            error = torch.full(value_test.shape, 1e7, device=device)
+            error = torch.full([K, W, H, C//group_size, group_size], 1e7, device=device)
             for n in range(2**(prune_idx-test_idx)):
                 tmp_value = n * 2.**(w_bitwidth-prune_idx)
                 new_error = (tmp_value - value_test) ** 2
@@ -64,7 +65,8 @@ def bitflip_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_
     return wq_int_new
 
 
-def bitflip_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
+def bitflip_signMagnitude_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
+    wq_int = wq_int.to(device)
     K, C = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
@@ -73,42 +75,42 @@ def bitflip_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_re
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
     # check existing zero columns
-    zero_column_mask = torch.zeros([w_bitwidth, K, C//group_size], device=device)
+    zero_column_mask = torch.zeros([w_bitwidth, K, C//group_size], dtype=torch.bool, device=device)
     for i in range(int(w_bitwidth)):
-        eq_zero = torch.eq(torch.sum(wqb_signMagnitude[i], dim=-1), 0.)
-        zero_column_mask[i][eq_zero] = 1
+        eq_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
+        zero_column_mask[i][eq_zero] = True
 
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
     # if require 4 zero columns, then we should prune from column 7 until column 4 
-    prune_until = torch.full([K, C//group_size], w_bitwidth-zero_column_required, device=device)
-
+    prune_until = torch.full([K, C//group_size], w_bitwidth-num_pruned_column, device=device)
     # cHeck if there are zero columns before prune_until
     for i in range(1, int(w_bitwidth)):
-        mask = torch.logical_and(prune_until.gt(i), torch.eq(zero_column_mask[i], 1))
+        mask = torch.logical_and(prune_until.gt(i), zero_column_mask[i])
         prune_until[mask] += 1
     
     # test_until is a pointer to specify which column to test until
     test_until = torch.full([K, C//group_size], 1, device=device)
     for i in range(1, int(w_bitwidth)):
-        mask = torch.logical_and(prune_until.gt(i), torch.eq(zero_column_mask[i], 1))
+        mask = torch.logical_and(prune_until.gt(i), zero_column_mask[i])
         test_until[mask] = i + 1
     
     # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
     # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
     value_test = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    value_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+
     for test_idx in range(1, int(w_bitwidth)):
         mask = torch.eq(test_until, test_idx)
         column_test = wqb_signMagnitude[test_idx:, mask, :]
         int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_idx, device=device)
         value_test[mask] = int_test
     
-    value_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
-    for prune_idx in range(w_bitwidth-zero_column_required, w_bitwidth):
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
         for test_idx in range(1, prune_idx):
             mask_group = torch.logical_and(torch.eq(test_until, test_idx), torch.eq(prune_until, prune_idx))
             mask_group = mask_group.unsqueeze(-1).expand(-1, -1, group_size)
-            error = torch.full(value_test.shape, 1e7, device=device)
+            error = torch.full([K, C//group_size, group_size], 1e7, device=device)
             for n in range(2**(prune_idx-test_idx)):
                 tmp_value = n * 2.**(w_bitwidth-prune_idx)
                 new_error = (tmp_value - value_test) ** 2
@@ -124,7 +126,8 @@ def bitflip_signMagnitude_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_re
     return wq_int_new
 
 
-def bitflip_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
+def bitflip_twosComplement_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
+    wq_int = wq_int.to(device)
     K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
@@ -133,22 +136,18 @@ def bitflip_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, zero_column
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
-    # tensor to store msb index of all groups
-    msb_idx = torch.zeros([K, W, H, C//group_size], device=device) 
-    eq_msb_column = torch.ones([K, W, H, C//group_size], device=device)
-    for i in range(1, int(w_bitwidth)):
-        eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
-        eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
-        msb_idx[eq_msb_column] += 1
-
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
     # if require 4 zero columns, then we should prune from column 7 until column 4 
-    prune_until = torch.full([K, W, H, C//group_size], w_bitwidth-zero_column_required, device=device)
-    prune_until = prune_until + msb_idx
+    prune_until = torch.full([K, W, H, C//group_size], w_bitwidth-num_pruned_column, device=device)
+    eq_msb_column = torch.ones([K, W, H, C//group_size], dtype=torch.bool, device=device)
+    for i in range(1, int(w_bitwidth)):
+        eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
+        eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
+        prune_until[eq_msb_column] += 1
     
     column_test = torch.zeros_like(wqb_twosComplement, dtype=torch.float32, device=device)
-    for prune_idx in range(w_bitwidth-zero_column_required, w_bitwidth):
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
         mask_group = torch.eq(prune_until, prune_idx)
         mask_value = mask_group.unsqueeze(-1).expand(-1, -1, -1, -1, group_size)
         column_test[prune_idx:, mask_value] = wqb_twosComplement[prune_idx:, mask_value]
@@ -164,7 +163,8 @@ def bitflip_twosComplement_conv(wq_int, w_bitwidth=8, group_size=16, zero_column
     return wq_int_new
 
 
-def bitflip_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
+def bitflip_twosComplement_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
+    wq_int = wq_int.to(device)
     K, C = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
@@ -172,22 +172,18 @@ def bitflip_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_r
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
-    # tensor to store msb index of all groups
-    msb_idx = torch.zeros([K, C//group_size], device=device) 
-    eq_msb_column = torch.ones([K, C//group_size], device=device)
-    for i in range(1, int(w_bitwidth)):
-        eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
-        eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
-        msb_idx[eq_msb_column] += 1
-
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
     # if require 4 zero columns, then we should prune from column 7 until column 4 
-    prune_until = torch.full([K, C//group_size], w_bitwidth-zero_column_required, device=device)
-    prune_until = prune_until + msb_idx
+    prune_until = torch.full([K, C//group_size], w_bitwidth-num_pruned_column, device=device)
+    eq_msb_column = torch.ones([K, C//group_size], dtype=torch.bool, device=device)
+    for i in range(1, int(w_bitwidth)):
+        eq_column = torch.all(torch.eq(wqb_twosComplement[0], wqb_twosComplement[i]), dim=-1)
+        eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
+        prune_until[eq_msb_column] += 1
     
     column_test = torch.zeros_like(wqb_twosComplement, dtype=torch.float32, device=device)
-    for prune_idx in range(w_bitwidth-zero_column_required, w_bitwidth):
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
         mask_group = torch.eq(prune_until, prune_idx)
         mask_value = mask_group.unsqueeze(-1).expand(-1, -1, group_size)
         column_test[prune_idx:, mask_value] = wqb_twosComplement[prune_idx:, mask_value]
@@ -203,45 +199,198 @@ def bitflip_twosComplement_fc(wq_int, w_bitwidth=8, group_size=16, zero_column_r
     return wq_int_new
 
 
-def process_zeroPoint_conv(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
-    wq_int_new = torch.zeros_like(wq_int)
-    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
+def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16, 
+                           num_pruned_column: int=4, const_bitwidth: int=5, device='cpu'):
+    wq_int = wq_int.to(device)
+    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
+    wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
+    wq_int = wq_int.view(K, W, H, C//group_size, group_size)
 
-    for k in range(K):  # output channel
-        for w in range(W):  # kernel width
-            for h in range(H):  # kernel height
-                for c in range(C // group_size):  # input channel 
-                    group_q = wq_int[k, c*group_size:(c+1)*group_size, w, h]
-                    group_q_new = search_zeroPoint(group_q, w_bitwidth=w_bitwidth, zero_column_required=pruned_column_num)
-                    wq_int_new[k, c*group_size:(c+1)*group_size, w, h] = group_q_new
+    # clipping threshold
+    v_max = 2.**(w_bitwidth-1) - 1
+    v_min = -v_max
+    offset_min = -2**int(const_bitwidth-1)
+    offset_max = 2**int(const_bitwidth-1) - 1
+    rp_factor = 2**int(const_bitwidth)
+    
+    wq_int_rp = wq_int.unsqueeze(0).repeat(rp_factor, 1, 1, 1, 1, 1)
+    for i, offset in enumerate(range(offset_min, offset_max)):
+        wq_int_rp[i] = wq_int_rp[i] + float(offset)
+    
+    wq_int_rp[wq_int_rp.lt(v_min)] = v_min
+    wq_int_rp[wq_int_rp.gt(v_max)] = v_max
+
+    wqb_signMagnitude = int_to_signMagnitude(wq_int_rp, w_bitwidth=w_bitwidth, device=device)
+
+    # prune_until is a pointer to specify which column to prune until
+    # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
+    # if require 4 zero columns, then we should prune from column 7 until column 4 
+    prune_until = torch.full([rp_factor, K, W, H, C//group_size], int(w_bitwidth-num_pruned_column), device=device)
+    # test_until is a pointer to specify which column to test until
+    test_until  = torch.full([rp_factor, K, W, H, C//group_size], 1, device=device)
+    # Boolean mask to indicate zero MSB column
+    is_msb_zero = torch.ones([rp_factor, K, W, H, C//group_size], dtype=torch.bool, device=device)
+    for i in range(1, int(w_bitwidth)):
+        is_current_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
+        is_msb_zero = torch.logical_and(is_msb_zero, is_current_zero)
+        prune_until[is_msb_zero] +=  1
+        test_until[is_msb_zero]  +=  1
+
+    # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+    # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+    value_test = torch.zeros_like(wq_int_rp, dtype=torch.float32, device=device)
+    value_new = torch.zeros_like(wq_int_rp, dtype=torch.float32, device=device)
+
+    for test_idx in range(1, int(w_bitwidth)):
+        mask = torch.eq(test_until, test_idx)
+        column_test = wqb_signMagnitude[test_idx:, mask, :]
+        int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_idx, device=device)
+        value_test[mask] = int_test
+    
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
+        for test_idx in range(1, prune_idx):
+            mask_group = torch.logical_and(torch.eq(test_until, test_idx), torch.eq(prune_until, prune_idx))
+            mask_group = mask_group.unsqueeze(-1).expand(-1, -1, -1, -1, -1, group_size)
+            error = torch.full([rp_factor, K, W, H, C//group_size, group_size], 1e7, device=device)
+            for n in range(2**(prune_idx-test_idx)):
+                tmp_value = n * 2.**(w_bitwidth-prune_idx)
+                new_error = (tmp_value - value_test) ** 2
+                mask_value = torch.logical_and(torch.lt(new_error, error), mask_group)
+                error[mask_value] = new_error[mask_value]
+                value_new[mask_value] = tmp_value
+            column_new = int_to_binary(value_new, w_bitwidth=w_bitwidth-test_idx, device=device)
+            wqb_signMagnitude[test_idx:, mask_group] = column_new[:, mask_group]
+    
+    wq_int_pruned = signMagnitude_to_int(wqb_signMagnitude, w_bitwidth=w_bitwidth, device=device)
+    for i, offset in enumerate(range(offset_min, offset_max)):
+        wq_int_pruned[i] = wq_int_pruned[i] - float(offset)
+    
+    wq_int_original = wq_int.to(torch.float32)
+    wq_int_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    error = torch.full([K, W, H, C//group_size], 1e7, device=device)
+    for i in range(rp_factor):
+        new_error = torch.sum((wq_int_pruned[i] - wq_int_original)**2, dim=-1)
+        mask_value = torch.lt(new_error, error)
+        error[mask_value] = new_error[mask_value]
+        wq_int_new[mask_value] = wq_int_pruned[i][mask_value]
+
+    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+
     return wq_int_new
 
 
-def process_zeroPoint_fc(wq_int, w_bitwidth=8, group_size=16, pruned_column_num=4, device='cpu'):
-    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
-    wqb_signMagnitude = wqb_signMagnitude.to('cpu')
-    wq_int_new = torch.zeros_like(wq_int)
-    K, C = wq_int.shape # output channel, input channel
+def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16, 
+                         num_pruned_column: int=4, const_bitwidth: int=5, device='cpu'):
+    wq_int = wq_int.to(device)
+    K, C = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
+    wq_int = wq_int.view(K, C//group_size, group_size)
 
-    for k in range(K):  # output channel
-        for c in range(C // group_size):  # input channel 
-            group_q = wq_int[k, c*group_size:(c+1)*group_size]
-            group_q_new = search_zeroPoint(group_q, w_bitwidth=w_bitwidth, zero_column_required=pruned_column_num)
-            wq_int_new[k, c*group_size:(c+1)*group_size] = group_q_new
+    # clipping threshold
+    v_max = 2.**(w_bitwidth-1) - 1
+    v_min = -v_max
+    offset_min = -2**int(const_bitwidth-1)
+    offset_max = 2**int(const_bitwidth-1) - 1
+    rp_factor = 2**int(const_bitwidth)
+    
+    wq_int_rp = wq_int.unsqueeze(0).repeat(rp_factor, 1, 1, 1)
+    for i, offset in enumerate(range(offset_min, offset_max)):
+        wq_int_rp[i] = wq_int_rp[i] + float(offset)
+    
+    wq_int_rp[wq_int_rp.lt(v_min)] = v_min
+    wq_int_rp[wq_int_rp.gt(v_max)] = v_max
+
+    wqb_signMagnitude = int_to_signMagnitude(wq_int_rp, w_bitwidth=w_bitwidth, device=device)
+
+    # prune_until is a pointer to specify which column to prune until
+    # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
+    # if require 4 zero columns, then we should prune from column 7 until column 4 
+    prune_until = torch.full([rp_factor, K, C//group_size], int(w_bitwidth-num_pruned_column), device=device)
+    # test_until is a pointer to specify which column to test until
+    test_until  = torch.full([rp_factor, K, C//group_size], 1, device=device)
+    # Boolean mask to indicate zero MSB column
+    is_msb_zero = torch.ones([rp_factor, K, C//group_size], dtype=torch.bool, device=device)
+    for i in range(1, int(w_bitwidth)):
+        is_current_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
+        is_msb_zero = torch.logical_and(is_msb_zero, is_current_zero)
+        prune_until[is_msb_zero] +=  1
+        test_until[is_msb_zero]  +=  1
+
+    # prune columns [prune_until:], we should test columns [test_until:] to minimize MSE
+    # since the columns between test_until and prune_until can be adjusted arbitrarily as long as [prune_until:] are all zero
+    value_test = torch.zeros_like(wq_int_rp, dtype=torch.float32, device=device)
+    value_new = torch.zeros_like(wq_int_rp, dtype=torch.float32, device=device)
+
+    for test_idx in range(1, int(w_bitwidth)):
+        mask = torch.eq(test_until, test_idx)
+        column_test = wqb_signMagnitude[test_idx:, mask, :]
+        int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_idx, device=device)
+        value_test[mask] = int_test
+
+    for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
+        for test_idx in range(1, prune_idx):
+            mask_group = torch.logical_and(torch.eq(test_until, test_idx), torch.eq(prune_until, prune_idx))
+            mask_group = mask_group.unsqueeze(-1).expand(-1, -1, -1, group_size)
+            error = torch.full(value_test.shape, 1e7, device=device)
+            for n in range(2**(prune_idx-test_idx)):
+                tmp_value = n * 2.**(w_bitwidth-prune_idx)
+                new_error = (tmp_value - value_test) ** 2
+                mask_value = torch.logical_and(torch.lt(new_error, error), mask_group)
+                error[mask_value] = new_error[mask_value]
+                value_new[mask_value] = tmp_value
+            column_new = int_to_binary(value_new, w_bitwidth=w_bitwidth-test_idx, device=device)
+            wqb_signMagnitude[test_idx:, mask_group] = column_new[:, mask_group]
+    
+    wq_int_pruned = signMagnitude_to_int(wqb_signMagnitude, w_bitwidth=w_bitwidth, device=device)
+    for i, offset in enumerate(range(offset_min, offset_max)):
+        wq_int_pruned[i] = wq_int_pruned[i] - float(offset)
+    
+    wq_int_original = wq_int.to(torch.float32)
+    wq_int_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    error = torch.full([K, C//group_size], 1e7, device=device)
+    for i in range(rp_factor):
+        new_error = torch.sum((wq_int_pruned[i] - wq_int_original)**2, dim=-1)
+        mask_value = torch.lt(new_error, error)
+        error[mask_value] = new_error[mask_value]
+        wq_int_new[mask_value] = wq_int_pruned[i][mask_value]
+
+    wq_int_new = wq_int_new.view(K, C)
+
     return wq_int_new
 
 
 if __name__ == "__main__":
-    t = torch.tensor([-15., -79.,  -5.,   2.,   0.,   9.,   0.,  -2.,  -4.,  -1.,  -8., -13.,
-          3.,   3.,  -2.,   8.])
-    tbs = int_to_signMagnitude(t, 8)
-    tb2 = int_to_twosComplement(t, 8)
-    a = search_zeroPoint(t, 8,4)
-    b = bitFlip_signMagnitude(t, tbs, 8,4)
-    c = bitFlip_twosComplement(t, tb2, 8,4)
+    import torch, torchvision
+    from torchvision.models.quantization import ResNet18_QuantizedWeights
+    model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
+
+    model = model.cpu()
+
+    weight_list = []
+    name_list   = []
+
+    for n, m in model.named_modules():
+        if hasattr(m, "weight"):
+            w = m.weight()
+            wint = torch.int_repr(w)
+            weight_list.append(wint)
+            name_list.append(n)
+
+    GROUP_SIZE = 16
+    w_bitwidth = 8
+    hamming_distance = 0.5
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    weight_test = weight_list[16]
+    print('name')
+    #print(weight_test.unique())
+    format = 'ZP Preserve'
+    if len(weight_test.shape) == 4:
+        weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                    num_pruned_column=4, device=device)
 
     

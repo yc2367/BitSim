@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 def int_to_signMagnitude(weight_q, w_bitwidth=8, cellBit=1, device='cpu'):
     weight_q = weight_q.to(device, copy=True)
     cellRange = 2**cellBit
