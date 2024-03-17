@@ -363,34 +363,5 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
 
 
 if __name__ == "__main__":
-    import torch, torchvision
-    from torchvision.models.quantization import ResNet18_QuantizedWeights
-    model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
-
-    model = model.cpu()
-
-    weight_list = []
-    name_list   = []
-
-    for n, m in model.named_modules():
-        if hasattr(m, "weight"):
-            w = m.weight()
-            wint = torch.int_repr(w)
-            weight_list.append(wint)
-            name_list.append(n)
-
-    GROUP_SIZE = 16
-    w_bitwidth = 8
-    hamming_distance = 0.5
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    weight_test = weight_list[16]
-    print('name')
-    #print(weight_test.unique())
-    format = 'ZP Preserve'
-    if len(weight_test.shape) == 4:
-        weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                    num_pruned_column=4, device=device)
-
+    pass
     

@@ -26,7 +26,7 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 16
+GROUP_SIZE = 32
 w_bitwidth = 8
 hamming_distance = 0.5
 
@@ -36,13 +36,15 @@ if loss == 0:
 else: 
     metric = 'KL_DIV'
 
+num = 4
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    for N in range(3, 4):
+    for N in range(num, num+1):
         num_pruned_column = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(14, len(weight_list)):
+        for i in range(10, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')
