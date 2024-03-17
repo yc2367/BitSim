@@ -268,7 +268,7 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         wq_int_pruned[i] = wq_int_pruned[i] - float(offset)
     
     wq_int_original = wq_int.to(torch.float32)
-    wq_int_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    wq_int_new = torch.zeros_like(wq_int_original, dtype=torch.float32, device=device)
     error = torch.full([K, W, H, C//group_size], 1e7, device=device)
     for i in range(rp_factor):
         new_error = torch.sum((wq_int_pruned[i] - wq_int_original)**2, dim=-1)
@@ -349,7 +349,7 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
         wq_int_pruned[i] = wq_int_pruned[i] - float(offset)
     
     wq_int_original = wq_int.to(torch.float32)
-    wq_int_new = torch.zeros_like(wq_int, dtype=torch.float32, device=device)
+    wq_int_new = torch.zeros_like(wq_int_original, dtype=torch.float32, device=device)
     error = torch.full([K, C//group_size], 1e7, device=device)
     for i in range(rp_factor):
         new_error = torch.sum((wq_int_pruned[i] - wq_int_original)**2, dim=-1)
