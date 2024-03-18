@@ -126,6 +126,7 @@ def main():
     qd2c = QD2C(model, wbit=args.wbit, args=args)
     qmodel = qd2c.fit()
 
+    print(f"N={args.N} | grp_size ${args.grp_size} | flag ${args.flag} | HDistance ${args.hamming_distance}")
     valid_epoch(qmodel, testloader)
 
 if __name__ == "__main__":
