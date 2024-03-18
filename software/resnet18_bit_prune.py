@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import math
 from util.bitflip_layer import *
+import time
 
 from torchvision.models.quantization import ResNet18_QuantizedWeights
 model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
@@ -30,6 +31,7 @@ def main():
         pruned_column_num = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
 
+        start = time.time()
         for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
@@ -73,9 +75,12 @@ def main():
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
                 print(f'{format.ljust(15)} MSE: {loss}')
                 file.writelines(f'{format.ljust(15)} MSE: {loss} \n')
-            print('\n')
+            print()
             file.writelines('\n')
         file.close()
+
+        end = time.time()
+        print(f'It took {end - start} seconds!')
 
                     
 if __name__ == "__main__":

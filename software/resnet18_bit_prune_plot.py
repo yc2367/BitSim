@@ -105,7 +105,7 @@ def main():
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
                 print(f'{format.ljust(15)} {metric}: {loss}')
                 file.writelines(f'{format.ljust(15)} {metric}: {loss} \n')
-            print('\n')
+            print()
             file.writelines('\n')
         file.close()
 

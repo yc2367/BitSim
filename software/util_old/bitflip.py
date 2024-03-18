@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from util.bin_int_convert import *
+from util_old.bin_int_convert import *
 
 
 def bitFlip_signMagnitude(group_q, group_qb, w_bitwidth=8, zero_column_required=4, return_binary=False):

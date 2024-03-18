@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from util.bitflip import *
+from util_old.bitflip import *
 
 def process_signMagnitude_conv(wq_int, w_bitwidth=8, group_size=16, zero_column_required=4, device='cpu'):
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
