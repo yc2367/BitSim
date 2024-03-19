@@ -9,3 +9,5 @@ hardware/*.txt
 hardware/work/*
 hardware/tmp/*
 hardware/run.tcl
+save/*
+*.pth.tar
