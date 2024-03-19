@@ -1,9 +1,13 @@
 __pycache__/
 
 software/*.txt
+software/plot/*
 
 hardware/work/*
 hardware/*.log
+hardware/*.txt
 hardware/work/*
-
-save/
+hardware/tmp/*
+hardware/run.tcl
+save/*
+*.pth.tar

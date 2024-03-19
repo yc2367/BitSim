@@ -1,0 +1,56 @@
+architecture:
+  name: mem-test
+  dataflow: sata
+  # timestep: 8
+  clock-frequency: 400
+
+  subtree:
+    - name: GLBs
+      class: glbs
+
+      local:
+        - name: GLB-weight
+          class: memory
+          act-tag: glb-weight
+          attributes:
+            kernel: sram
+            width: 32
+            size-bytes: 147456
+            bank: 2
+            count: 1
+            gated: y
+        - name: GLB-ifmap
+          class: memory
+          act-tag: glb-ifmap
+          attributes:
+            kernel: sram
+            width: 32
+            size-bytes: 32768
+            bank: 2
+            count: 1
+            gated: y
+        - name: GLB-ofmap
+          class: memory
+          act-tag: glb-ofmap
+          attributes:
+            kernel: sram
+            width: 32
+            size-bytes: 32768
+            bank: 2
+            count: 1
+            gated: y
+  
+    - name: DRAMs
+      class: dram
+
+      local:
+        - name: DRAM-system
+          class: memory
+          act-tag: dram
+          attributes:
+            kernel: dram
+            width: 128
+            size-bytes: 536870912
+            bank: 16
+            count: 1
+            gated: y

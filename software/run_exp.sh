@@ -1,2 +1,6 @@
-python resnet18_bit_prune.py;
-python resnet50_bit_prune.py;
+if [ -d "./plot" ]; then
+  rm -rf ./plot
+fi;
+
+mkdir plot
+python resnet18_bit_prune_plot.py
