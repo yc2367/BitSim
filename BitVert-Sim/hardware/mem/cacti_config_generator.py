@@ -262,7 +262,7 @@ class CactiConfig:
                                 '#-verbose "T"\n',
                                 '#-verbose "F"\n',
                                 '\n',
-                                '=======USER DEFINE======= \n']
+                                '======= USER DEFINE ======= \n']
 
         self.config_options = {}
         self.config_options['cache_size'] = {'string': '-size (bytes) ',
@@ -273,11 +273,11 @@ class CactiConfig:
                                              'default': 64}
 
         self.config_options['line_size'] = {'string': '-block size (bytes) ',
-                                            'option': [8, 16, 24],
+                                            'option': [8, 16, 24, 32, 64],
                                             'default': 64}
 
         # Unit for IO_bus_width is bit.
-        self.config_options['IO_bus_width'] = {'string': '-output/input bus width ',
+        self.config_options['IO_bus_width'] = {'string': '# Wordwidth (bit)\n' + '-output/input bus width ',
                                                'option': [4, 8, 16, 24, 32, 64, 128],
                                                'default': 128}
 
@@ -330,11 +330,7 @@ class CactiConfig:
         original_cwd = os.getcwd()
         # Change the directory to the cacti master directory as using absolute paths yields a "Segmentation fault"
         os.chdir(cacti_master_path)
-        common_path = os.path.commonpath([cacti_master_path, self_gen_cfg_path])
-        if common_path != cacti_master_path:
-            raise NotImplementedError("Config path for cacti should be inside cacti_master folder.")
-        self_gen_cfg_path_relative = f"./{os.path.relpath(self_gen_cfg_path, start=cacti_master_path)}"
-        cacti_cmd = f'./cacti -infile {self_gen_cfg_path_relative}'
+        cacti_cmd = f'./cacti -infile {self_gen_cfg_path}'
         stream = os.popen(cacti_cmd)
         output = stream.readlines()
         for l in output:
@@ -351,8 +347,7 @@ class CactiConfig:
         '''
         user_input format can be 1 out of these 3:
         user_input = ['default']
-        user_input = ['single', [['mem_type', 'technology', ...], ['"ram"', 0.028, ...]]
-        user_input = ['sweep', ['IO_bus_width'/'']]
+        user_input = ['single', {'mem_type': '"ram"', 'technology': 0.028, ...}]
         '''
         print(f"{self_gen_cfg_path=}")
         user_config = []
@@ -370,22 +365,4 @@ class CactiConfig:
                     user_config.append(self.config_options[itm]['string'] + str(self.config_options[itm]['default']) + '\n')
             self.write_config(user_config, self_gen_cfg_path)
             self.call_cacti(cacti_master_path, self_gen_cfg_path)
-
-        if user_input.mode == 'sweep':
-            # produce non-sweeping term
-            common_part = []
-            for itm in self.config_options.keys():
-                if itm not in user_input.option.keys():
-                    common_part.append(self.config_options[itm]['string'] + str(self.config_options[itm]['default']) + '\n')
-
-            for itm in user_input.option.keys():
-                for va in self.config_options[itm]['option']:
-                    user_config.append([self.config_options[itm]['string'] + str(va) + '\n'])
-
-            for ii in range(len(user_config)):
-                user_config[ii] += common_part
-
-            for ii in range(len(user_config)):
-                self.write_config(user_config[ii], self_gen_cfg_path)
-                self.call_cacti(cacti_master_path, self_gen_cfg_path)
                 

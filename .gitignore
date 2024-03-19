@@ -5,6 +5,7 @@ software/plot/*
 
 hardware/work/*
 hardware/*.log
+hardware/*.txt
 hardware/work/*
 hardware/tmp/*
 hardware/run.tcl
