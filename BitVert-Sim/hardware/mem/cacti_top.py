@@ -82,10 +82,10 @@ with open(f'{self_gen_path}/cache.cfg.out', 'r') as fp:
                 except:
                     pass
 
-
 for i in range(len(result[' Capacity (bytes)'])):
     size_byte = result[' Capacity (bytes)'][i]
     area = result[' Area (mm2)'][i]
+    latency = result[' Access time (ns)'][i]
     read_word = result[' Dynamic read energy (nJ)'][i]
     write_word = result[' Dynamic write energy (nJ)'][i]
     mem_bw = result[' Output width (bits)'][i]
@@ -104,6 +104,7 @@ for i in range(len(result[' Capacity (bytes)'])):
         'size_byte': int(size_byte),
         'size_bit': int(size_byte * 8),
         'area': area,
+        'latency': latency,
         'cost': {'read_word': read_word, 'write_word': write_word},
         'IO_bus_width': int(mem_bw),
         'ex_rd_port': int(ex_rd_port),

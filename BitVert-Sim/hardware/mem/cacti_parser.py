@@ -47,14 +47,14 @@ class CactiParser:
 
         if memory_pool != None:
             for instance in memory_pool:
+                bank_count = int(mem_config["bank_count"])
+                technology = memory_pool[instance]["technology"]
                 mem_type = memory_pool[instance]["memory_type"]
-                IO_bus_width = int(memory_pool[instance]["IO_bus_width"])
-                bank_count = int(memory_pool[instance]["bank_count"])
+                cache_size = int(memory_pool[instance]["size_bit"] * bank_count)
+                IO_bus_width = int(memory_pool[instance]["IO_bus_width"] * bank_count) 
                 ex_rd_port = int(memory_pool[instance]["ex_rd_port"])
                 ex_wr_port = int(memory_pool[instance]["ex_wr_port"])
                 rd_wr_port = int(memory_pool[instance]["rd_wr_port"])
-                cache_size = int(memory_pool[instance]["size_bit"])
-                technology = float(memory_pool[instance]["technology"])
 
                 if (
                     (mem_config['mem_type'] == mem_type)
@@ -84,15 +84,17 @@ class CactiParser:
         if not is_valid:
             raise ValueError(f'The provided memory configuration is INVALID. Missed keys: {str(missed_keys)}')
         
+        array_size = int(mem_config['size'] / 8 / mem_config['bank_count'])
+        array_IO_bus_width = int(mem_config['rw_bw'] / mem_config['bank_count'])        
         try:
             subprocess.check_output(
                 [
                     "python", cacti_top_path,
                     "--technology", str(mem_config['technology']),
                     "--mem_type", mem_config['mem_type'],
-                    "--cache_size", str(int(mem_config['size'] / 8)),
-                    "--bank_count", str(mem_config['bank_count']),
-                    "--IO_bus_width", str(mem_config['rw_bw']),
+                    "--cache_size", str(array_size),
+                    "--bank_count", str(1),
+                    "--IO_bus_width", str(array_IO_bus_width),
                     "--ex_rd_port", str(mem_config['r_port']),
                     "--ex_wr_port", str(mem_config['w_port']),
                     "--rd_wr_port", str(mem_config['rw_port']),
@@ -145,23 +147,34 @@ class CactiParser:
                 mem_pool_path,
                 cacti_top_path
             )
+        
+        '''
+        try:
+            with open(mem_pool_path, "r") as fp:
+                memory_pool = yaml.full_load(fp)
+        except FileNotFoundError:
+            subprocess.call(['touch', mem_pool_path])
+            with open(mem_pool_path, "r") as fp:
+                memory_pool = yaml.full_load(fp)
+        '''
 
         with open(mem_pool_path, "r") as fp:
             memory_pool = yaml.full_load(fp)
 
         if memory_pool != None:
             for instance in memory_pool:
-                IO_bus_width = int(memory_pool[instance]["IO_bus_width"])
-                area = memory_pool[instance]["area"]
-                bank_count = int(memory_pool[instance]["bank_count"])
-                read_cost = memory_pool[instance]["cost"]["read_word"] * 1000
-                write_cost = memory_pool[instance]["cost"]["write_word"] * 1000
+                bank_count = int(mem_config["bank_count"])
+                technology = memory_pool[instance]["technology"]
+                mem_type = memory_pool[instance]["memory_type"]
+                cache_size = int(memory_pool[instance]["size_bit"] * bank_count)
+                IO_bus_width = int(memory_pool[instance]["IO_bus_width"] * bank_count) 
                 ex_rd_port = int(memory_pool[instance]["ex_rd_port"])
                 ex_wr_port = int(memory_pool[instance]["ex_wr_port"])
                 rd_wr_port = int(memory_pool[instance]["rd_wr_port"])
-                cache_size = int(memory_pool[instance]["size_bit"])
-                mem_type = memory_pool[instance]["memory_type"]
-                technology = memory_pool[instance]["technology"]
+                read_cost = memory_pool[instance]["cost"]["read_word"] * bank_count * 1000
+                write_cost = memory_pool[instance]["cost"]["write_word"] * bank_count * 1000 
+                area = memory_pool[instance]["area"] * bank_count
+                latency = memory_pool[instance]["latency"]
 
                 if (
                     (mem_config['mem_type'] == mem_type)
@@ -176,6 +189,7 @@ class CactiParser:
                     mem_config['r_cost'] = read_cost
                     mem_config['w_cost'] = write_cost
                     mem_config['area'] = area
+                    mem_config['latency'] = latency
 
                     return mem_config
 
