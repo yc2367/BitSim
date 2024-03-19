@@ -6,18 +6,13 @@ class MemoryInstance:
     ## The class constructor
     # Collect all the basic information of a physical memory module.
     # @param name: memory module name, e.g. 'SRAM_512KB_BW_16b', 'I_RF'.
-    # @param size: total memory capacity (unit: bit).
-    # @param rw_bw/w_bw: memory bandwidth (or wordlength) (unit: bit/cycle).
+    # @param mem_config: configuration of memory
     # @param r_cost/w_cost: memory unit data access energy.
     # @param area: memory area (unit can be whatever user-defined unit).
-    # @param r_port: number of memory read port.
-    # @param w_port: number of memory write port (rd_port and wr_port can work in parallel).
-    # @param rw_port: number of memory port for both read and write (read and write cannot happen in parallel).
     # @param latency: memory access latency (unit: number of cycles).
     # @param min_r_granularity (int): The minimal number of bits than can be read in a clock cycle (can be a less than rw_bw)
     # @param min_w_granularity (int): The minimal number of bits that can be written in a clock cycle (can be less than w_bw)
     # @param mem_type (str): The type of memory. Used for CACTI cost extraction.
-    # @param technology (float): The technology node.
     # @param auto_cost_extraction (bool): Automatically extract the read cost, write cost and area using CACTI.
     # @param double_buffering_support (bool): Support for double buffering on this memory instance.
     def __init__(
@@ -48,6 +43,7 @@ class MemoryInstance:
         else:
             self.r_cost = r_cost
             self.w_cost = w_cost
+            self.area = area
             self.latency = latency
         
         self.size = mem_config['size']
@@ -67,7 +63,15 @@ class MemoryInstance:
             self.w_bw_min = mem_config['rw_bw']
         else:
             self.w_bw_min = min_w_granularity
-
+    
+    def get_cacti_cost(self):
+        cost = {}
+        cost['r_cost'] = self.r_cost 
+        cost['w_cost'] = self.w_cost 
+        cost['area'] = self.area 
+        cost['latency'] = self.latency 
+        return cost
+    
     ## JSON Representation of this class to save it to a json file.
     def __jsonrepr__(self):
         return self.__dict__
@@ -90,7 +94,7 @@ if __name__ == "__main__":
                   'mem_type': 'sram', 
                   'size': 131072 * 8 * 8, 
                   'bank_count': 8, 
-                  'rw_bw': 512*8, 
+                  'rw_bw': 512 * 8, 
                   'r_port': 1, 
                   'w_port': 1, 
                   'rw_port': 0

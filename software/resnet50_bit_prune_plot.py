@@ -11,8 +11,8 @@ from util.bitflip_layer import *
 import warnings 
 warnings.filterwarnings("ignore")
 
-from torchvision.models.quantization import ResNet18_QuantizedWeights
-model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
+from torchvision.models.quantization import ResNet50_QuantizedWeights
+model = torchvision.models.quantization.resnet50(weights = ResNet50_QuantizedWeights, quantize=True)
 
 model = model.cpu()
 
@@ -41,9 +41,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
-        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
+        file = open(f'resnet50_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(1, len(weight_list)):
+        for i in range(30, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')

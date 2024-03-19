@@ -20,7 +20,7 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 16
+GROUP_SIZE = 32
 w_bitwidth = 8
 hamming_distance = 0.5
 
@@ -66,11 +66,9 @@ def main():
                                                                num_pruned_column=pruned_column_num, device=device)
                     #print(weight_test_new.unique())
 
-                weight_original = weight_test.to(torch.float32)
-                weight_new = weight_test_new.to(torch.float32)
+                weight_original = weight_test.to(dtype=torch.float, device=device)
+                weight_new = weight_test_new.to(device)
 
-                weight_original = weight_original.to(device)
-                weight_new = weight_new.to(device)
                 loss = criterion(weight_original, weight_new)
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
                 print(f'{format.ljust(15)} MSE: {loss}')
