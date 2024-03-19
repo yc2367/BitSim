@@ -32,7 +32,7 @@ python3 -W ignore ./torchq.py \
     --val_dir "/share/seo/imagenet/val/" \
     --evaluate \
     --trainer ptq \
-    --flag 0 \
+    --flag 1 \
     --grp_size 32 \
-    --N 5 \
+    --N 4 \
     --hamming_distance 0.5 \

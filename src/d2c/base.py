@@ -1,11 +1,14 @@
 """
 Decimal to binary
 """
-
+import sys
+sys.path.append("../../")
 import torch.nn as nn
 from src.d2c.util import *
 from src.module.fuse import QConvReLU, QConvBNReLU
 from src.module.base import _QBaseLinear
+
+from software.util.bitflip_layer import bitflip_zeroPoint_conv, bitflip_zeroPoint_fc
 
 class D2C(object):
     def __init__(self, model:nn.Module, wbit:int, args):
@@ -53,12 +56,11 @@ class D2C(object):
 
             else:
                 if len(weight.shape) == 4:
-                    weight_new = process_twosComplement_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
-                                                                    pruned_column_num=self.pruned_column_num, device=weight.device, h_distance_target=self.hamming_distance)
+                    weight_new = bitflip_zeroPoint_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cpu")
 
                 if len(weight.shape) == 2:
-                    weight_new = process_twosComplement_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
-                                                                    pruned_column_num=self.pruned_column_num, device=weight.device, h_distance_target=self.hamming_distance)
+                    weight_new = bitflip_zeroPoint_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cpu")
+
             # update the dictionary
             mse_error = torch.nn.functional.mse_loss(weight_new, weight)
             print(f"MSE Error = {mse_error}")

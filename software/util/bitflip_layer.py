@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from util.bin_int_convert import *
+from software.util.bin_int_convert import *
 
 
 def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
