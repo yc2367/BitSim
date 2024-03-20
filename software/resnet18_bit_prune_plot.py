@@ -43,7 +43,7 @@ def main():
         num_pruned_column = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(14, len(weight_list)):
+        for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')

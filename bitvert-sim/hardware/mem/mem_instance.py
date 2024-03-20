@@ -36,8 +36,8 @@ class MemoryInstance:
             cacti_parser = CactiParser()
             
             mem_config = cacti_parser.get_item(mem_config)
-            self.r_cost = round(mem_config['r_cost'], 2)
-            self.w_cost = round(mem_config['w_cost'], 2)
+            self.r_cost = mem_config['r_cost']
+            self.w_cost = mem_config['w_cost']
             self.area = mem_config['area']
             self.latency = round(mem_config['latency'], 3)
         else:
@@ -45,24 +45,28 @@ class MemoryInstance:
             self.w_cost = w_cost
             self.area = area
             self.latency = latency
-        
+
         self.size = mem_config['size']
         self.bank = mem_config['bank_count']
         self.rw_bw = mem_config['rw_bw']
         self.r_port = mem_config['r_port']
         self.w_port = mem_config['w_port']
         self.rw_port = mem_config['rw_port']
-
         self.name = name
         self.double_buffering_support = double_buffering_support
+
         if not min_r_granularity:
             self.r_bw_min = mem_config['rw_bw']
+            self.r_cost_min = self.r_cost
         else:
             self.r_bw_min = min_r_granularity
+            self.r_cost_min = self.r_cost / (self.rw_bw / self.r_bw_min)
         if not min_w_granularity:
             self.w_bw_min = mem_config['rw_bw']
+            self.w_cost_min = self.w_cost
         else:
             self.w_bw_min = min_w_granularity
+            self.w_cost_min = self.w_cost / (self.rw_bw / self.w_bw_min)
     
     def get_cacti_cost(self):
         cost = {}
@@ -92,15 +96,16 @@ class MemoryInstance:
 if __name__ == "__main__":
     mem_config = {'technology': 0.028,
                   'mem_type': 'sram', 
-                  'size': 131072 * 8 * 8, 
+                  'size': 32 * 1024 * 8 * 8, 
                   'bank_count': 8, 
                   'rw_bw': 512 * 8, 
                   'r_port': 1, 
                   'w_port': 1, 
-                  'rw_port': 0
+                  'rw_port': 0,
                   }
-    mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, None, True, False)
+    mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, 128, True, False)
     print(f'read cost: {mem.r_cost}, write cost: {mem.w_cost}, ' + 
+          f'read min cost: {mem.r_cost_min}, write min cost: {mem.w_cost_min}, ' + 
           f'area: {mem.area}, latency: {mem.latency}')
     '''
     name: str,

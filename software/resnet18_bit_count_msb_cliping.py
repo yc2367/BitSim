@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 import numpy as np
-from util.count_bit import *
+from util.count_sparsity import *
 
 from torchvision.models.quantization import ResNet18_QuantizedWeights
 model = torchvision.models.quantization.resnet18(weights = ResNet18_QuantizedWeights, quantize=True)
@@ -19,7 +19,7 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 8
+GROUP_SIZE = 16
 w_bitwidth = 8
 
 def main():
