@@ -70,7 +70,7 @@ def main():
                                                                     num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
                         weight_test_new = bitflip_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    num_pruned_column=num_pruned_column, device=device)
+                                                                    num_pruned_column=num_pruned_column, device=device)        
                 else:
                     format = 'ZP Preserve'
                     if len(weight_test.shape) == 4:

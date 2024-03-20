@@ -20,16 +20,16 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 32
+GROUP_SIZE = 16
 w_bitwidth = 8
-hamming_distance = 0.5
+num_col_pruned = 4
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss()
-    for N in range(4, 5):
+    for N in range(num_col_pruned, num_col_pruned+1):
         pruned_column_num = N
-        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_h{math.floor(hamming_distance)}_c{pruned_column_num}.txt', 'w')
+        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
 
         start = time.time()
         for i in range(1, len(weight_list)):

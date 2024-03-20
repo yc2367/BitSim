@@ -18,8 +18,8 @@ xqtype="lsq"
 wqtype="adaround"
 ttype=ptq
 
-save_path="/home/jm2787/BitSim/save/resnet18_w8_a8_lr1e-3_batch128_cross_entropyloss/t2c/"
-pre_trained="/home/jm2787/BitSim/save/resnet18_w8_a8_lr1e-3_batch128_cross_entropyloss/model_best.pth.tar"
+save_path="/home/yc2367/BitSim/save/resnet18_w8_a8_lr1e-3_batch128_cross_entropyloss/t2c/"
+pre_trained="/home/yc2367/BitSim/save/resnet18_w8_a8_lr1e-3_batch128_cross_entropyloss/model_best.pth.tar"
 
 python3 -W ignore ./t2c.py \
     --save_path ${save_path} \
@@ -31,8 +31,8 @@ python3 -W ignore ./t2c.py \
     --wbit ${wbit} \
     --abit ${abit} \
     --dataset ${dataset} \
-    --train_dir "/share/seo/imagenet/train/" \
-    --val_dir "/share/seo/imagenet/val/" \
+    --train_dir "/share/abdelfattah/imagenet/train/" \
+    --val_dir "/share/abdelfattah/imagenet/val/" \
     --evaluate \
     --trainer ptq \
     --flag 1 \
