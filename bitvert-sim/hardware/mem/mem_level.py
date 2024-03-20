@@ -99,18 +99,15 @@ class MemoryLevel:
         self.port_allocation()
 
         """ memory access bandwidth and energy extraction """
-
         self.read_energy = memory_instance.r_cost
         self.write_energy = memory_instance.w_cost
         self.read_bw = memory_instance.r_bw
         self.write_bw = memory_instance.w_bw
 
         """ calculate memory unrolling count """
-        # Todo: for memory level using diagonal dimension, only allow it to have an unrolling count of '1'.
         self.calc_unroll_count()
 
         """ calculate in ideal case memory's total fanout and per-data fanout """
-        # Todo: not consider systolic array for now.
         self.calc_fanout()
 
     def __update_formatted_string(self):
@@ -240,10 +237,9 @@ class MemoryLevel:
     # Empty set signals that the Memory Level has no dimensions served to the level below, thus a fanout of 1.
     # 'all' signals that the MemoryLevel's served_dimensions are all dimensions, thus there is only one instance of the MemoryNode at this level.
     def check_served_dimensions(self):
-        served_dimensions = self.served_dimensions_vec
+        served_dimensions = list(self.served_dimensions_vec)
         operands = self.operands
         # Modify served_dimensions to list to be able to change it if empty set or None.
-        served_dimensions = list(served_dimensions)
         for op_idx, (op, op_served_dimensions) in enumerate(
             zip(operands, served_dimensions)
         ):

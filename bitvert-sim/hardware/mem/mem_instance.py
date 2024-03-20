@@ -56,9 +56,9 @@ class MemoryInstance:
         self.name = name
         self.double_buffering_support = double_buffering_support
         if not min_r_granularity:
-            self.rw_bw_min = mem_config['rw_bw']
+            self.r_bw_min = mem_config['rw_bw']
         else:
-            self.rw_bw_min = min_r_granularity
+            self.r_bw_min = min_r_granularity
         if not min_w_granularity:
             self.w_bw_min = mem_config['rw_bw']
         else:

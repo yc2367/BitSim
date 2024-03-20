@@ -43,7 +43,7 @@ def main():
         num_pruned_column = N
         file = open(f'resnet18_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(1, len(weight_list)):
+        for i in range(14, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
             file.writelines(f'Layer {name_list[i]} \n')
@@ -53,7 +53,8 @@ def main():
             f = sns.displot(weight_test.cpu().reshape(-1).numpy())
             f.fig.suptitle(str(i) + '  ' +str(name_list[i]))
             f.savefig(f'./plot/{name_list[i]}_original.png')
-
+            
+            #print([weight_test[weight_test.eq(i)].numel() for i in range(-40, -20)])
             for func in [0, 1, 2]:
                 if func == 0:
                     format = 'Sign Magnitude'
@@ -80,7 +81,7 @@ def main():
                         weight_test_new = bitflip_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)
                 #print(weight_test_new.unique())
-
+                
                 # plot distribution
                 plt.figure(dpi=300)
                 f = sns.displot(weight_test_new.cpu().reshape(-1).numpy())
@@ -102,6 +103,7 @@ def main():
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
                 print(f'{format.ljust(15)} {metric}: {loss}')
                 file.writelines(f'{format.ljust(15)} {metric}: {loss} \n')
+                #print([weight_test_new[weight_test_new.eq(i)].numel() for i in range(-128, 127)])
             print()
             file.writelines('\n')
         file.close()

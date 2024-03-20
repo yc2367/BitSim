@@ -279,7 +279,7 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         mask_value = torch.lt(new_error, error)
         error[mask_value] = new_error[mask_value]
         wq_int_new[mask_value] = wq_int_pruned[i][mask_value]
-    
+
     wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
 
     return wq_int_new
