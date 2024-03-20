@@ -1,13 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from util.bin_int_convert import *
-
-criterion = nn.KLDivLoss()
-def kl_loss(weight_original, weight_new):
-    weight_original = F.log_softmax(weight_original, dim=-1)
-    weight_new = F.softmax(weight_new, dim=-1)
-    return torch.sum(F.kl_div(weight_original, weight_new, reduction='none'), dim=-1)
 
 
 def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
@@ -224,8 +217,8 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
     v_max = 2.**(w_bitwidth-1) - 1
     v_min = -v_max
     offset_min = -2**int(const_bitwidth-1)
-    offset_max = 2**int(const_bitwidth-1)
-    rp_factor = offset_max - offset_min
+    offset_max = 2**int(const_bitwidth-1) 
+    rp_factor = 2**int(const_bitwidth)
 
     wq_int_rp = wq_int.unsqueeze(0).repeat(rp_factor, 1, 1)
     for i, offset in enumerate(range(offset_min, offset_max)):
@@ -306,8 +299,8 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
     v_max = 2.**(w_bitwidth-1) - 1
     v_min = -v_max
     offset_min = -2**int(const_bitwidth-1)
-    offset_max = 2**int(const_bitwidth-1)
-    rp_factor = offset_max - offset_min
+    offset_max = 2**int(const_bitwidth-1) 
+    rp_factor = 2**int(const_bitwidth)
     
     wq_int_rp = wq_int.unsqueeze(0).repeat(rp_factor, 1, 1)
     for i, offset in enumerate(range(offset_min, offset_max)):
@@ -375,80 +368,6 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
     return wq_int_new
 
 
-def bitVert_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
-    wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-    NUM_GROUP = K*W*H*C//group_size
-
-    result_bitflip_signMagnitude = bitflip_signMagnitude_conv(wq_int, w_bitwidth=w_bitwidth, group_size=group_size, 
-                                                               num_pruned_column=num_pruned_column, device=device)
-    result_bitflip_signMagnitude = result_bitflip_signMagnitude.permute([0, 2, 3, 1]).unsqueeze(-1)
-    result_bitflip_signMagnitude = result_bitflip_signMagnitude.view(NUM_GROUP, group_size)
-
-    result_colAvg_twosComplement = colAvg_twosComplement_conv(wq_int, w_bitwidth=w_bitwidth, group_size=group_size,
-                                                               num_pruned_column=num_pruned_column, device=device)
-    result_colAvg_twosComplement = result_colAvg_twosComplement.permute([0, 2, 3, 1]).unsqueeze(-1)
-    result_colAvg_twosComplement = result_colAvg_twosComplement.view(NUM_GROUP, group_size)
-
-    result_bitflip_zeroPoint = bitflip_zeroPoint_conv(wq_int, w_bitwidth=w_bitwidth, group_size=group_size, 
-                                                       num_pruned_column=num_pruned_column, device=device)
-    result_bitflip_zeroPoint = result_bitflip_zeroPoint.permute([0, 2, 3, 1]).unsqueeze(-1)
-    result_bitflip_zeroPoint = result_bitflip_zeroPoint.view(NUM_GROUP, group_size)
-
-    wq_int_original = wq_int.to(torch.float32)
-    wq_int_original = wq_int_original.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int_original = wq_int_original.view(NUM_GROUP, group_size)
-    wq_int_new = torch.zeros_like(wq_int_original, dtype=torch.float32, device=device)
-
-    possible_result = [result_bitflip_signMagnitude, result_colAvg_twosComplement, result_bitflip_zeroPoint]
-    error = torch.full([NUM_GROUP], 1e7, device=device)
-    for result in possible_result:
-        new_error = torch.sum((result - wq_int_original)**2, dim=-1)
-        mask_value = torch.lt(new_error, error)
-        error[mask_value] = new_error[mask_value]
-        wq_int_new[mask_value] = result[mask_value]
-    
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
-    return wq_int_new
-
-
-def bitVert_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
-    wq_int = wq_int.to(device)
-    K, C = wq_int.size() # output channel, input channel, kernel width, kernel height
-    if C < group_size:
-        group_size = C
-    NUM_GROUP = K*C//group_size
-
-    result_bitflip_signMagnitude = bitflip_signMagnitude_fc(wq_int, w_bitwidth=w_bitwidth, group_size=group_size, 
-                                                            num_pruned_column=num_pruned_column, device=device)
-    result_bitflip_signMagnitude = result_bitflip_signMagnitude.view(NUM_GROUP, group_size)
-
-    result_colAvg_twosComplement = colAvg_twosComplement_fc(wq_int, w_bitwidth=w_bitwidth, group_size=group_size,
-                                                            num_pruned_column=num_pruned_column, device=device)
-    result_colAvg_twosComplement = result_colAvg_twosComplement.view(NUM_GROUP, group_size)
-
-    result_bitflip_zeroPoint = bitflip_zeroPoint_fc(wq_int, w_bitwidth=w_bitwidth, group_size=group_size, 
-                                                    num_pruned_column=num_pruned_column, device=device)
-    result_bitflip_zeroPoint = result_bitflip_zeroPoint.view(NUM_GROUP, group_size)
-
-    wq_int_original = wq_int.to(torch.float32)
-    wq_int_original = wq_int_original.view(NUM_GROUP, group_size)
-    wq_int_new = torch.zeros_like(wq_int_original, dtype=torch.float32, device=device)
-
-    possible_result = [result_bitflip_signMagnitude, result_colAvg_twosComplement, result_bitflip_zeroPoint]
-    error = torch.full([NUM_GROUP], 1e7, device=device)
-    for result in possible_result:
-        new_error = torch.sum((result - wq_int_original)**2, dim=-1)
-        mask_value = torch.lt(new_error, error)
-        error[mask_value] = new_error[mask_value]
-        wq_int_new[mask_value] = result[mask_value]
-    
-    wq_int_new = wq_int_new.view(K, C)
-    return wq_int_new
-
-
 def colAvg_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16, 
                           num_pruned_column: int=4, const_bitwidth: int=5, device='cpu'):
     wq_int = wq_int.to(device)
@@ -463,8 +382,8 @@ def colAvg_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
     v_max = 2.**(w_bitwidth-1) - 1
     v_min = -v_max
     offset_min = -2**int(const_bitwidth-1)
-    offset_max = 2**int(const_bitwidth-1)
-    rp_factor = offset_max - offset_min
+    offset_max = 2**int(const_bitwidth-1) - 1
+    rp_factor = 2**int(const_bitwidth)
 
     wq_int_rp = wq_int.unsqueeze(0).repeat(rp_factor, 1, 1)
     for i, offset in enumerate(range(offset_min, offset_max)):

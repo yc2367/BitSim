@@ -29,19 +29,19 @@ for n, m in model.named_modules():
 GROUP_SIZE = 16
 w_bitwidth = 8
 
-loss = 1
+loss = 0
 if loss == 0:
     metric = 'MSE'
 else: 
     metric = 'KL_DIV'
 
-pruned_col_num = 4
+pruned_col_num = 2
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
-        file = open(f'resnet18_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
+        file = open(f'resnet18_prune_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
 
         for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
@@ -55,7 +55,7 @@ def main():
             f.savefig(f'./plot/{name_list[i]}_original.png')
             
             #print([weight_test[weight_test.eq(i)].numel() for i in range(-40, -20)])
-            for func in [0, 1, 2]:
+            for func in [0, 1, 2, 3]:
                 if func == 0:
                     format = 'Sign Magnitude'
                     if len(weight_test.shape) == 4:
@@ -67,19 +67,27 @@ def main():
                 elif func == 1:
                     format = '2s Complement'
                     if len(weight_test.shape) == 4:
-                        weight_test_new = bitflip_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                        weight_test_new = colAvg_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
-                        weight_test_new = bitflip_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                        weight_test_new = colAvg_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)        
-                else:
-                    format = 'ZP Preserve'
+                elif func == 2:
+                    format = 'ZP SignMagnitude'
                     if len(weight_test.shape) == 4:
                         weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
                         weight_test_new = bitflip_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)
+                else:
+                    format = 'Optimal'
+                    if len(weight_test.shape) == 4:
+                        weight_test_new = bitVert_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                        num_pruned_column=num_pruned_column, device=device)
+                    elif len(weight_test.shape) == 2:
+                        weight_test_new = bitVert_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                    num_pruned_column=num_pruned_column, device=device)
                 #print(weight_test_new.unique())
                 
                 # plot distribution
@@ -101,8 +109,8 @@ def main():
                     loss = criterion(weight_original, weight_new)
 
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
-                print(f'{format.ljust(15)} {metric}: {loss}')
-                file.writelines(f'{format.ljust(15)} {metric}: {loss} \n')
+                print(f'{format.ljust(20)} {metric}: {loss}')
+                file.writelines(f'{format.ljust(20)} {metric}: {loss} \n')
                 #print([weight_test_new[weight_test_new.eq(i)].numel() for i in range(-128, 127)])
             print()
             file.writelines('\n')
