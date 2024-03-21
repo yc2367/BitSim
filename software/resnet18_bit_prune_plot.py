@@ -29,13 +29,13 @@ for n, m in model.named_modules():
 GROUP_SIZE = 16
 w_bitwidth = 8
 
-loss = 0
+loss = 1
 if loss == 0:
     metric = 'MSE'
 else: 
     metric = 'KL_DIV'
 
-pruned_col_num = 2
+pruned_col_num = 3
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

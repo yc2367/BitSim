@@ -7,32 +7,50 @@ def count_zero_value_conv(wq_int):
     K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
     param_count = K*C*W*H
     sparse_value_count = torch.sum(torch.eq(wq_int, 0))
-    return sparse_value_count, param_count
+    return int(sparse_value_count), int(param_count)
 
 
 def count_zero_value_fc(wq_int):
     K, C = wq_int.size()
     param_count = K*C
     sparse_value_count = torch.sum(torch.eq(wq_int, 0))
-    return sparse_value_count, param_count
+    return int(sparse_value_count), int(param_count)
 
 
-def count_zero_bit_conv(wq_int, w_bitwidth=8, device='cpu'):
+def count_zero_bit_sm_conv(wq_int, w_bitwidth=8, device='cpu'):
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    param_count = K*C*W*H
+    total_bit_count = w_bitwidth*param_count
+    sparse_bit_count = total_bit_count - torch.sum(wqb_signMagnitude)
+    return int(sparse_bit_count), int(total_bit_count)
+
+
+def count_zero_bit_sm_fc(wq_int, w_bitwidth=8, device='cpu'):
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    K, C = wq_int.size()
+    param_count = K*C
+    total_bit_count = w_bitwidth*param_count
+    sparse_bit_count = total_bit_count - torch.sum(wqb_signMagnitude)
+    return int(sparse_bit_count), int(total_bit_count)
+
+
+def count_zero_bit_2s_conv(wq_int, w_bitwidth=8, device='cpu'):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
     param_count = K*C*W*H
     total_bit_count = w_bitwidth*param_count
-    sparse_bit_count = (total_bit_count - torch.sum(wqb_twosComplement))
-    return sparse_bit_count, total_bit_count
+    sparse_bit_count = total_bit_count - torch.sum(wqb_twosComplement)
+    return int(sparse_bit_count), int(total_bit_count)
 
 
-def count_zero_bit_fc(wq_int, w_bitwidth=8, device='cpu'):
+def count_zero_bit_2s_fc(wq_int, w_bitwidth=8, device='cpu'):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     K, C = wq_int.size()
     param_count = K*C
     total_bit_count = w_bitwidth*param_count
-    sparse_bit_count = (total_bit_count - torch.sum(wqb_twosComplement))
-    return sparse_bit_count, total_bit_count
+    sparse_bit_count = total_bit_count - torch.sum(wqb_twosComplement)
+    return int(sparse_bit_count), int(total_bit_count)
 
 
 def count_less_bit_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
@@ -50,7 +68,7 @@ def count_less_bit_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
     sparse_bit_count = torch.sum(bit_one_count)
     total_bit_count = K * C * W * H * w_bitwidth
 
-    return sparse_bit_count, total_bit_count
+    return int(sparse_bit_count), int(total_bit_count)
 
 
 def count_less_bit_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
@@ -68,7 +86,7 @@ def count_less_bit_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
     sparse_bit_count = torch.sum(bit_one_count)
     total_bit_count = K * C * w_bitwidth
 
-    return sparse_bit_count, total_bit_count
+    return int(sparse_bit_count), int(total_bit_count)
 
 
 def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
@@ -97,7 +115,7 @@ def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cp
     bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
     sparse_bit_count = torch.sum(bit_one_count)
     total_bit_count = K * C * W * H * w_bitwidth
-    return sparse_bit_count, total_bit_count
+    return int(sparse_bit_count), int(total_bit_count)
 
 
 def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
@@ -126,7 +144,7 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
     bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
     sparse_bit_count = torch.sum(bit_one_count)
     total_bit_count = K * C * w_bitwidth
-    return sparse_bit_count, total_bit_count
+    return int(sparse_bit_count), int(total_bit_count)
 
 class countZeroColumn:
     def __init__(self) -> None:
