@@ -136,6 +136,7 @@ class CactiParser:
             logger.warning(
                 f"Type {mem_config['mem_type']} -> {new_mem_type}. Size {mem_config['size']} -> {new_size}." 
             )
+
             mem_config['mem_type'] = new_mem_type
             mem_config['size'] = new_size
 

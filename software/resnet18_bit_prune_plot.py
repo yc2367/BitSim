@@ -35,7 +35,7 @@ if loss == 0:
 else: 
     metric = 'KL_DIV'
 
-pruned_col_num = 3
+pruned_col_num = 2
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

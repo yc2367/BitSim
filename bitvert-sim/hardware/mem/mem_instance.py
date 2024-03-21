@@ -96,9 +96,9 @@ class MemoryInstance:
 if __name__ == "__main__":
     mem_config = {'technology': 0.028,
                   'mem_type': 'sram', 
-                  'size': 32 * 1024 * 8 * 8, 
-                  'bank_count': 8, 
-                  'rw_bw': 512 * 8, 
+                  'size': 9*16 * 1024*8, 
+                  'bank_count': 16, 
+                  'rw_bw': 256*16, 
                   'r_port': 1, 
                   'w_port': 1, 
                   'rw_port': 0,
