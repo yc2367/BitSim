@@ -5,14 +5,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class CactiParser:
+class CactiSimulation:
 
     ## Path of current directory
     cacti_top_path = os.path.dirname(os.path.realpath(__file__))
     ## Path to cached cacti simulated memories
     MEM_POOL_PATH = f"{cacti_top_path}/example_cacti_pool.yaml"
     ## Path to cacti python script to extract costs
-    CACTI_TOP_PATH = f"{cacti_top_path}/cacti_top.py"
+    CACTI_TOP_PATH = f"{cacti_top_path}/cacti_program.py"
 
     ## The class constructor
     def __init__(self):
@@ -143,11 +143,7 @@ class CactiParser:
         if not self.item_exists(
             mem_config, mem_pool_path
         ):
-            self.create_item(
-                mem_config,
-                mem_pool_path,
-                cacti_top_path
-            )
+            self.create_item(mem_config, mem_pool_path, cacti_top_path)
         
         '''
         try:

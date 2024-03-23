@@ -3,7 +3,7 @@ import os
 import argparse
 
 from cacti_config_generator import CactiConfig
-from mem_util import CactiUserConfig
+from mem_util import MemUserConfig
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--technology')
@@ -18,6 +18,7 @@ parser.add_argument('--mem_pool_path')
 args = parser.parse_args()
 
 mem_pool_path = args.mem_pool_path
+print(mem_pool_path)
 cacti_master_path = os.path.dirname(mem_pool_path) + '/cacti'
 print(f"{cacti_master_path=}")
 
@@ -67,7 +68,7 @@ option = {
             'ex_wr_port': ex_wr_port, 
             'rd_wr_port': rd_wr_port
         }
-user_config = CactiUserConfig(mode, option)
+user_config = MemUserConfig(mode, option)
 C.cacti_auto_run(user_config, cacti_master_path, f'{self_gen_path}/cache.cfg')
 
 result = {}

@@ -138,3 +138,32 @@ class Register(OperationalUnit):
         super().__init__(input_precision, output_precision, energy_cost, area, include_energy, include_area)
 
 
+## Hardware register
+class BitSerialPE(OperationalUnit):
+    ## The class constructor
+    # @param input_precision: The bit precision of the bit-serial PE.
+    # @param group_size:      The group size of the bit-serial PE.
+    # @param energy_cost:     The energy cost of PE.
+    # @param area:            The area of PE.
+    # @param include_energy:  If True, then use energy_cost for the register energy. 
+    #                         If False, then the energy_cost is included in the PE energy.
+    # @param include_area:    If True, then use area for the PE area. 
+    #                         If False, then the area is included in the PE area.
+    def __init__(
+            self, 
+            input_precision: List[int], 
+            group_size: int,
+            energy_cost: float, 
+            area: float,
+            include_energy: bool,
+            include_area: bool
+    ):
+        if ( len(input_precision) != 2 ):
+            print(f'ERROR! You must provide precision for 2 input operands of a bit-serial PE.')
+            exit(1)
+        if ( min(input_precision) != 1 ):
+            print(f'ERROR! One of the inputs must be 1-bit for a bit-serial PE.')
+            exit(1)
+        output_precision = max(input_precision)
+        self.group_size = group_size
+        super().__init__(input_precision, output_precision, energy_cost, area, include_energy, include_area)

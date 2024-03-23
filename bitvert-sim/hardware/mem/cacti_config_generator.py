@@ -1,5 +1,5 @@
 import os
-from mem_util import CactiUserConfig
+from mem_util import MemUserConfig
 
 class CactiConfig:
 
@@ -346,7 +346,7 @@ class CactiConfig:
 
     def cacti_auto_run(
             self, 
-            user_input: CactiUserConfig, 
+            user_input: MemUserConfig, 
             cacti_master_path: str, 
             self_gen_cfg_path: str):
         '''

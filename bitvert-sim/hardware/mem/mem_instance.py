@@ -1,4 +1,4 @@
-from cacti_parser import CactiParser
+from cacti_simulation import CactiSimulation
 from typing import Dict
 
 ## Description missing
@@ -13,7 +13,7 @@ class MemoryInstance:
     # @param min_r_granularity (int): The minimal number of bits than can be read in a clock cycle (can be a less than rw_bw)
     # @param min_w_granularity (int): The minimal number of bits that can be written in a clock cycle (can be less than w_bw)
     # @param mem_type (str): The type of memory. Used for CACTI cost extraction.
-    # @param auto_cost_extraction (bool): Automatically extract the read cost, write cost and area using CACTI.
+    # @param get_cost_from_cacti (bool): Automatically extract the read cost, write cost and area using CACTI.
     # @param double_buffering_support (bool): Support for double buffering on this memory instance.
     def __init__(
         self,
@@ -25,17 +25,17 @@ class MemoryInstance:
         area: float = 0,
         min_r_granularity=None,
         min_w_granularity=None,
-        auto_cost_extraction: bool = False,
+        get_cost_from_cacti: bool = False,
         double_buffering_support: bool = False,
     ):
-        if auto_cost_extraction:
+        if get_cost_from_cacti:
             # Size must be a multiple of 8 when using CACTI
             assert (
                 mem_config['size'] % 8 == 0
             ), "Memory size must be a multiple of 8 when automatically extracting costs using CACTI."
-            cacti_parser = CactiParser()
-            
-            mem_config = cacti_parser.get_item(mem_config)
+            cacti_simulation = CactiSimulation()
+            mem_config = cacti_simulation.get_item(mem_config)
+
             self.r_cost = mem_config['r_cost']
             self.w_cost = mem_config['w_cost']
             self.area = mem_config['area']
@@ -130,6 +130,6 @@ if __name__ == "__main__":
         min_r_granularity=None,
         min_w_granularity=None,
         mem_type: str = "sram",
-        auto_cost_extraction: bool = False,
+        get_cost_from_cacti: bool = False,
         double_buffering_support: bool = False,
     '''
