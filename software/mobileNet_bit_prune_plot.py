@@ -60,7 +60,7 @@ def main():
             f.savefig(f'./plot/{name_list[i]}_original.png')
             
             #print([weight_test[weight_test.eq(i)].numel() for i in range(-40, -20)])
-            for func in [0, 1, 2, 3]:
+            for func in [0, 1, 2,]:
                 if func == 0:
                     format = 'Round to Nearest'
                     if len(weight_test.shape) == 4:
