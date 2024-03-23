@@ -172,8 +172,8 @@ class CactiParser:
                 ex_rd_port = int(memory_pool[instance]["ex_rd_port"])
                 ex_wr_port = int(memory_pool[instance]["ex_wr_port"])
                 rd_wr_port = int(memory_pool[instance]["rd_wr_port"])
-                read_cost = memory_pool[instance]["cost"]["read_word"] * bank_count * 1000
-                write_cost = memory_pool[instance]["cost"]["write_word"] * bank_count * 1000 
+                read_cost = memory_pool[instance]["cost"]["read_word"] * bank_count
+                write_cost = memory_pool[instance]["cost"]["write_word"] * bank_count
                 area = memory_pool[instance]["area"] * bank_count
                 latency = memory_pool[instance]["latency"]
 

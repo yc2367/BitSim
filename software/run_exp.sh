@@ -3,4 +3,5 @@ if [ -d "./plot" ]; then
 fi;
 
 mkdir plot
-python resnet18_bit_prune_plot.py
+# python resnet18_bit_prune_plot.py
+python mobileNet_bit_prune_plot.py

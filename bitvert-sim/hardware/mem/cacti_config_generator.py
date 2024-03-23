@@ -312,6 +312,11 @@ class CactiConfig:
         self.config_options['mem_type'] = {'string': '-cache type ',
                                            'option': ['"cache"', '"ram"', '"main memory"'],
                                            'default': '"ram"'}
+        
+        self.config_options['mem_cell_type'] = {'string': '-Data array cell type - ', 
+                                                'option': ['"itrs-hp"', '"itrs-lstp"', 
+                                                           '"itrs-lop"', '"lp-dram"', '"comm-dram"'],
+                                                'default': '"itrs-hp"'}
 
     def change_default_value(self, name_list, new_value_list):
         for idx, name in enumerate(name_list):

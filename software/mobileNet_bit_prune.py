@@ -5,8 +5,9 @@ import math
 from util.bitflip_layer import *
 import time
 
-from torchvision.models.quantization import ResNet50_QuantizedWeights
-model = torchvision.models.quantization.resnet50(weights = ResNet50_QuantizedWeights, quantize=True)
+from torchvision.models.quantization import MobileNet_V2_QuantizedWeights
+model = torchvision.models.quantization.mobilenet_v2(weights = MobileNet_V2_QuantizedWeights, 
+                                                     quantize=True)
 
 model = model.cpu()
 
@@ -22,21 +23,25 @@ for n, m in model.named_modules():
 
 GROUP_SIZE = 16
 w_bitwidth = 8
-num_col_pruned = 2
+num_col_pruned = 4
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss()
     for N in range(num_col_pruned, num_col_pruned+1):
         pruned_column_num = N
-        file = open(f'resnet50_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
+        file = open(f'MobileNet_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
 
         start = time.time()
         for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
             print(f'Layer {name_list[i]}')
+            print(f'Layer Shaoe {weight_test.shape}')
+            print(f'Layer Params {torch.prod(torch.Tensor(list(weight_test.shape)))}')
             file.writelines(f'Layer {name_list[i]} \n')
-            #print(weight_test.unique())
+            file.writelines(f'Layer Shaoe {weight_test.shape} \n')
+            file.writelines(f'Layer Params {torch.prod(torch.Tensor(list(weight_test.shape)))} \n')
+            # print(weight_test.unique())
             for func in [0, 1, 2,]:
                 if func == 0:
                     format = 'Sign Magnitude'

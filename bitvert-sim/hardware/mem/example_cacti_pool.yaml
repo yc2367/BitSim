@@ -1,80 +1,16 @@
-9216.0_Byte_512.0_BW_1_1_0:
-  IO_bus_width: 512
-  area: 0.0579372
+1250000000.0_Byte_64.0_BW_0_0_1:
+  IO_bus_width: 64
+  area: 274.252
   bank_count: 1
   cost:
-    read_word: 0.0179824
-    write_word: 0.0260172
-  ex_rd_port: 1
-  ex_wr_port: 1
-  latency: 0.224455
-  memory_type: sram
-  rd_wr_port: 0
-  size_bit: 73728
-  size_byte: 9216
-  technology: 0.028
-
-9216.0_Byte_256.0_BW_1_1_0:
-  IO_bus_width: 256
-  area: 0.033088
-  bank_count: 1
-  cost:
-    read_word: 0.00648713
-    write_word: 0.0146311
-  ex_rd_port: 1
-  ex_wr_port: 1
-  latency: 0.227089
-  memory_type: sram
-  rd_wr_port: 0
-  size_bit: 73728
-  size_byte: 9216
-  technology: 0.028
-
-9216.0_Byte_32.0_BW_1_1_0:
-  IO_bus_width: 32
-  area: 0.0252503
-  bank_count: 1
-  cost:
-    read_word: 0.00304362
-    write_word: 0.00238476
-  ex_rd_port: 1
-  ex_wr_port: 1
-  latency: 0.227089
-  memory_type: sram
-  rd_wr_port: 0
-  size_bit: 73728
-  size_byte: 9216
-  technology: 0.028
-
-18432.0_Byte_128.0_BW_1_1_0:
-  IO_bus_width: 128
-  area: 0.0533913
-  bank_count: 1
-  cost:
-    read_word: 0.00868582
-    write_word: 0.0098832
-  ex_rd_port: 1
-  ex_wr_port: 1
-  latency: 0.280295
-  memory_type: sram
-  rd_wr_port: 0
-  size_bit: 147456
-  size_byte: 18432
-  technology: 0.028
-
-18432.0_Byte_512.0_BW_1_1_0:
-  IO_bus_width: 512
-  area: 0.0792229
-  bank_count: 1
-  cost:
-    read_word: 0.0198582
-    write_word: 0.0361461
-  ex_rd_port: 1
-  ex_wr_port: 1
-  latency: 0.280295
-  memory_type: sram
-  rd_wr_port: 0
-  size_bit: 147456
-  size_byte: 18432
+    read_word: 0.411227
+    write_word: 6.01728
+  ex_rd_port: 0
+  ex_wr_port: 0
+  latency: 19.5758
+  memory_type: dram
+  rd_wr_port: 1
+  size_bit: 10000000000
+  size_byte: 1250000000
   technology: 0.028
 

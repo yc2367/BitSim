@@ -7,7 +7,7 @@ class MemoryInstance:
     # Collect all the basic information of a physical memory module.
     # @param name: memory module name, e.g. 'SRAM_512KB_BW_16b', 'I_RF'.
     # @param mem_config: configuration of memory
-    # @param r_cost/w_cost: memory unit data access energy.
+    # @param r_cost/w_cost: memory unit data access energy in (pJ).
     # @param area: memory area (unit can be whatever user-defined unit).
     # @param latency: memory access latency (unit: number of cycles).
     # @param min_r_granularity (int): The minimal number of bits than can be read in a clock cycle (can be a less than rw_bw)
@@ -94,7 +94,20 @@ class MemoryInstance:
 
 
 if __name__ == "__main__":
-    mem_config = {'technology': 0.028,
+    func = 'dram'
+    if func == 'dram':
+        mem_config = {'technology': 0.028,
+                    'mem_type': 'dram', 
+                    'size': 10000000000, 
+                    'bank_count': 1, 
+                    'rw_bw': 64, 
+                    'r_port': 0, 
+                    'w_port': 0, 
+                    'rw_port': 1, 
+                    }
+        mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, None, True, False)
+    else:
+        mem_config = {'technology': 0.028,
                   'mem_type': 'sram', 
                   'size': 9*16 * 1024*8, 
                   'bank_count': 16, 
@@ -103,9 +116,9 @@ if __name__ == "__main__":
                   'w_port': 1, 
                   'rw_port': 0,
                   }
-    mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, 128, True, False)
-    print(f'read cost: {mem.r_cost}, write cost: {mem.w_cost}, ' + 
-          f'read min cost: {mem.r_cost_min}, write min cost: {mem.w_cost_min}, ' + 
+        mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, 128, True, False)
+    print(f'read cost: {mem.r_cost} nJ, write cost: {mem.w_cost} nJ, ' + 
+          f'read min cost: {mem.r_cost_min}, write min cost: {mem.w_cost_min} nJ, ' + 
           f'area: {mem.area}, latency: {mem.latency}')
     '''
     name: str,

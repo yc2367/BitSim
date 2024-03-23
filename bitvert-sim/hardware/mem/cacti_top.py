@@ -42,8 +42,10 @@ mem_type = args.mem_type
 
 if mem_type == 'sram':
     mem_type = '"ram"'
+    mem_cell_type = '"itrs-hp"'
 else:
     mem_type == '"main memory"'
+    mem_cell_type = '"comm-dram"'
 
 technology = args.technology
 cache_size = args.cache_size
@@ -57,6 +59,7 @@ mode = 'single'
 option = { 
             'technology': technology,
             'mem_type': mem_type, 
+            'mem_cell_type': mem_cell_type, 
             'cache_size': cache_size, 
             'bank_count': bank_count, 
             'IO_bus_width': IO_bus_width, 
