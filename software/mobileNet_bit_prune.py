@@ -44,7 +44,7 @@ def main():
             # print(weight_test.unique())
             for func in [0, 1, 2,]:
                 if func == 0:
-                    format = 'Sign Magnitude'
+                    format = 'Round to Nearest'
                     if len(weight_test.shape) == 4:
                         weight_test_new = bitflip_signMagnitude_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=pruned_column_num, device=device)
@@ -53,7 +53,7 @@ def main():
                                                                 num_pruned_column=pruned_column_num, device=device)
                     #print(weight_test_new.unique())
                 elif func == 1:
-                    format = '2s Complement'
+                    format = 'Column Averaging'
                     if len(weight_test.shape) == 4:
                         #weight_test = weight_test[2:3,0:16, 0:1,0:1]
                         weight_test_new = colAvg_twosComplement_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
@@ -62,7 +62,7 @@ def main():
                         weight_test_new = colAvg_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=pruned_column_num, device=device)
                 elif func == 2:
-                    format = 'ZP SignMagnitude'
+                    format = 'Zero Point'
                     if len(weight_test.shape) == 4:
                         weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                  num_pruned_column=pruned_column_num, device=device)
