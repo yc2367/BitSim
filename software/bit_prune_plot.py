@@ -1,18 +1,35 @@
 import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import math
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import argparse
 from util.bitflip_layer import *
 
 import warnings 
 warnings.filterwarnings("ignore")
 
-from torchvision.models.quantization import ResNet50_QuantizedWeights
-model = torchvision.models.quantization.resnet50(weights = ResNet50_QuantizedWeights, quantize=True)
+from torchvision.models.quantization import (ResNet18_QuantizedWeights, 
+                                             MobileNet_V2_QuantizedWeights,
+                                             ResNet50_QuantizedWeights)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', choices = ['resnet18', 'resnet50', 'mobilenet'])
+args = parser.parse_args()
+
+model_name = args.model
+
+if model_name == 'resnet18':
+    weights = ResNet18_QuantizedWeights
+    model = torchvision.models.quantization.resnet18(weights = weights, quantize=True)
+elif model_name == 'resnet50':
+    weights = ResNet50_QuantizedWeights
+    model = torchvision.models.quantization.resnet50(weights = weights, quantize=True)
+elif model_name == 'mobilenet':
+    weights = MobileNet_V2_QuantizedWeights
+    model = torchvision.models.quantization.mobilenet_v2(weights = weights, quantize=True)
+else:
+    raise ValueError('ERROR! The provided model is not one of supported models.')
 
 model = model.cpu()
 
@@ -35,26 +52,30 @@ if loss == 0:
 else: 
     metric = 'KL_DIV'
 
-pruned_col_num = 4
+pruned_col_num = 2
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
-        file = open(f'resnet50_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
+        file = open(f'resnet18_prune_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
 
-        for i in range(30, len(weight_list)):
+        for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
+            weight_shape = weight_list[i].shape
             print(f'Layer {name_list[i]}')
+            print(f'Layer Shape: {weight_shape}')
             file.writelines(f'Layer {name_list[i]} \n')
+            file.writelines(f'Layer Shape: {weight_shape} \n')
 
             #print(weight_test.unique())
             plt.figure(dpi=300)
             f = sns.displot(weight_test.cpu().reshape(-1).numpy())
             f.fig.suptitle(str(i) + '  ' +str(name_list[i]))
             f.savefig(f'./plot/{name_list[i]}_original.png')
-
-            for func in [0, 1, 2]:
+            
+            #print([weight_test[weight_test.eq(i)].numel() for i in range(-40, -20)])
+            for func in [0, 1, 2,]:
                 if func == 0:
                     format = 'Round to Nearest'
                     if len(weight_test.shape) == 4:
@@ -70,8 +91,8 @@ def main():
                                                                     num_pruned_column=num_pruned_column, device=device)
                     elif len(weight_test.shape) == 2:
                         weight_test_new = colAvg_twosComplement_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
-                                                                    num_pruned_column=num_pruned_column, device=device)
-                else:
+                                                                    num_pruned_column=num_pruned_column, device=device)        
+                elif func == 2:
                     format = 'Zero Point'
                     if len(weight_test.shape) == 4:
                         weight_test_new = bitflip_zeroPoint_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
@@ -79,8 +100,16 @@ def main():
                     elif len(weight_test.shape) == 2:
                         weight_test_new = bitflip_zeroPoint_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
                                                                     num_pruned_column=num_pruned_column, device=device)
+                else:
+                    format = 'Optimal'
+                    if len(weight_test.shape) == 4:
+                        weight_test_new = bitVert_conv(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                        num_pruned_column=num_pruned_column, device=device)
+                    elif len(weight_test.shape) == 2:
+                        weight_test_new = bitVert_fc(weight_test, w_bitwidth=w_bitwidth, group_size=GROUP_SIZE, 
+                                                    num_pruned_column=num_pruned_column, device=device)
                 #print(weight_test_new.unique())
-
+                
                 # plot distribution
                 plt.figure(dpi=300)
                 f = sns.displot(weight_test_new.cpu().reshape(-1).numpy())
@@ -100,8 +129,9 @@ def main():
                     loss = criterion(weight_original, weight_new)
 
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
-                print(f'{format.ljust(15)} {metric}: {loss}')
-                file.writelines(f'{format.ljust(15)} {metric}: {loss} \n')
+                print(f'{format.ljust(20)} {metric}: {loss}')
+                file.writelines(f'{format.ljust(20)} {metric}: {loss} \n')
+                #print([weight_test_new[weight_test_new.eq(i)].numel() for i in range(-128, 127)])
             print()
             file.writelines('\n')
         file.close()

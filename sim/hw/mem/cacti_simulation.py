@@ -16,6 +16,9 @@ class CactiSimulation:
 
     ## The class constructor
     def __init__(self):
+        if os.path.isfile(self.MEM_POOL_PATH):
+            os.remove(self.MEM_POOL_PATH)
+        open(self.MEM_POOL_PATH, 'w').close()
         self.required_keys = ['technology', 'mem_type', 'size', 'bank_count', 'rw_bw', 'r_port', 'w_port', 'rw_port']
     
     def is_valid_config(self, mem_config):
@@ -139,21 +142,8 @@ class CactiSimulation:
 
             mem_config['mem_type'] = new_mem_type
             mem_config['size'] = new_size
-
-        if not self.item_exists(
-            mem_config, mem_pool_path
-        ):
-            self.create_item(mem_config, mem_pool_path, cacti_top_path)
         
-        '''
-        try:
-            with open(mem_pool_path, "r") as fp:
-                memory_pool = yaml.full_load(fp)
-        except FileNotFoundError:
-            subprocess.call(['touch', mem_pool_path])
-            with open(mem_pool_path, "r") as fp:
-                memory_pool = yaml.full_load(fp)
-        '''
+        self.create_item(mem_config, mem_pool_path, cacti_top_path)
 
         with open(mem_pool_path, "r") as fp:
             memory_pool = yaml.full_load(fp)

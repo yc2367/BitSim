@@ -1,4 +1,4 @@
-from cacti_simulation import CactiSimulation
+from hw.mem.cacti_simulation import CactiSimulation
 from typing import Dict
 
 ## Description missing

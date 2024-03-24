@@ -1,18 +1,35 @@
 import torch, torchvision
 import torch.nn as nn
-import numpy as np
-import math
 from util.bitflip_layer import *
 import time
+import argparse
 
-from torchvision.models.quantization import ResNet50_QuantizedWeights
-model = torchvision.models.quantization.resnet50(weights = ResNet50_QuantizedWeights, quantize=True)
+from torchvision.models.quantization import (ResNet18_QuantizedWeights, 
+                                             MobileNet_V2_QuantizedWeights,
+                                             ResNet50_QuantizedWeights)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', choices = ['resnet18', 'resnet50', 'mobilenet'])
+args = parser.parse_args()
+
+model_name = args.model
+
+if model_name == 'resnet18':
+    weights = ResNet18_QuantizedWeights
+    model = torchvision.models.quantization.resnet18(weights = weights, quantize=True)
+elif model_name == 'resnet50':
+    weights = ResNet50_QuantizedWeights
+    model = torchvision.models.quantization.resnet50(weights = weights, quantize=True)
+elif model_name == 'mobilenet':
+    weights = MobileNet_V2_QuantizedWeights
+    model = torchvision.models.quantization.mobilenet_v2(weights = weights, quantize=True)
+else:
+    raise ValueError('ERROR! The provided model is not one of supported models.')
 
 model = model.cpu()
 
 weight_list = []
 name_list   = []
-
 for n, m in model.named_modules():
     if hasattr(m, "weight"):
         w = m.weight()
@@ -22,20 +39,24 @@ for n, m in model.named_modules():
 
 GROUP_SIZE = 16
 w_bitwidth = 8
-num_col_pruned = 2
+num_col_pruned = 4
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss()
     for N in range(num_col_pruned, num_col_pruned+1):
         pruned_column_num = N
-        file = open(f'resnet50_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
+        file = open(f'{model_name}_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
 
         start = time.time()
         for i in range(1, len(weight_list)):
             weight_test = weight_list[i]
+            weight_shape = weight_list[i].shape
             print(f'Layer {name_list[i]}')
+            print(f'Layer Shape: {weight_shape}')
             file.writelines(f'Layer {name_list[i]} \n')
+            file.writelines(f'Layer Shape: {weight_shape} \n')
+            
             #print(weight_test.unique())
             for func in [0, 1, 2,]:
                 if func == 0:

@@ -1,4 +1,5 @@
 from typing import List
+import math
 
 class OperationalUnit:
     ## The class constructor
@@ -46,9 +47,7 @@ class OperationalUnit:
         return (
             ( self.precision      == __o.precision )     and 
             ( self.energy         == __o.energy )        and
-            ( self.area           == __o.area )          and 
-            ( self.include_energy == __o.include_energy) and 
-            ( self.include_area   == __o.include_area)    
+            ( self.area           == __o.area )            
         )
     
     def get_precision(self):
@@ -138,32 +137,61 @@ class Register(OperationalUnit):
         super().__init__(input_precision, output_precision, energy_cost, area, include_energy, include_area)
 
 
-## Hardware register
-class BitSerialPE(OperationalUnit):
+## Bit Serial PE
+class PE(OperationalUnit):
     ## The class constructor
     # @param input_precision: The bit precision of the bit-serial PE.
     # @param group_size:      The group size of the bit-serial PE.
     # @param energy_cost:     The energy cost of PE.
     # @param area:            The area of PE.
-    # @param include_energy:  If True, then use energy_cost for the register energy. 
-    #                         If False, then the energy_cost is included in the PE energy.
-    # @param include_area:    If True, then use area for the PE area. 
-    #                         If False, then the area is included in the PE area.
     def __init__(
             self, 
             input_precision: List[int], 
             group_size: int,
             energy_cost: float, 
-            area: float,
-            include_energy: bool,
-            include_area: bool
+            area: float
     ):
         if ( len(input_precision) != 2 ):
             print(f'ERROR! You must provide precision for 2 input operands of a bit-serial PE.')
             exit(1)
-        if ( min(input_precision) != 1 ):
-            print(f'ERROR! One of the inputs must be 1-bit for a bit-serial PE.')
+        if ( energy_cost == 0 ):
+            print(f'ERROR! You must provide the energy cost of a PE.')
             exit(1)
-        output_precision = max(input_precision)
+        if ( area == 0 ):
+            print(f'ERROR! You must provide the area of a PE.')
+            exit(1)
+
         self.group_size = group_size
-        super().__init__(input_precision, output_precision, energy_cost, area, include_energy, include_area)
+        include_energy = True
+        include_area   = True
+        output_precision = input_precision[0] + input_precision[1] + math.log2(group_size)
+        super().__init__(input_precision, output_precision, 
+                         energy_cost, area, include_energy, include_area)
+
+
+## Bit Serial PE
+class BitSerialPE(PE):
+    ## The class constructor
+    # @param input_precision_s: The precision of bit-serial input.
+    # @param input_precision_p: The precision of bit-parallel input.
+    # @param group_size:        The group size of the bit-serial PE.
+    # @param energy_cost:       The energy cost of the bit-serial PE.
+    # @param area:              The area of the bit-serial PE.
+    def __init__(
+            self, 
+            input_precision_s: int, 
+            input_precision_p: int, 
+            group_size: int,
+            energy_cost: float, 
+            area: float
+    ):
+        if ( energy_cost == 0 ):
+            print(f'ERROR! You must provide the energy cost of a PE.')
+            exit(1)
+        if ( area == 0 ):
+            print(f'ERROR! You must provide the area of a PE.')
+            exit(1)
+        input_precision = [input_precision_s, input_precision_p]
+        self.input_precision_s = input_precision_s
+        self.input_precision_p = input_precision_p
+        super().__init__(input_precision, group_size, energy_cost, area)
