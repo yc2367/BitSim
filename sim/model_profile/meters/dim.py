@@ -41,9 +41,13 @@ class DIM(Profiler):
         self.weight_dim[name] = [k, k, cin, co]
 
     def linear_dim(self, layer:nn.Linear, name):
-        self.input_dim[name] = [layer.in_features]
-        self.output_dim[name] = [layer.out_features]
-        self.weight_dim[name] = [layer.in_features, layer.out_features]
+        i_feature = self.feature_dict[name][0]
+        o_feature = self.feature_dict[name][1]
+        bi, ci = i_feature.shape
+        bo, co = o_feature.shape
+        self.input_dim[name] = [bi, ci]
+        self.output_dim[name] = [bo, co]
+        self.weight_dim[name] = [ci, co]
 
     def fit(self):
         super().forward()

@@ -10,7 +10,7 @@ from model_profile.meters.dim import DIM
 # Stripes accelerator
 class Stripes(Accelerator):
 
-    PE_GROUP_SIZE = 16
+    PE_GROUP_SIZE = 16 # length of the dot product inside one PE
     PE_ENERGY = 3
     PE_AREA = 1
 
@@ -19,7 +19,7 @@ class Stripes(Accelerator):
                  input_precision_p: int, # bit-parallel operand precision
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module):
+                 model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
         assert len(pe_array_dim) == 2, \
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
         
@@ -38,11 +38,24 @@ class Stripes(Accelerator):
             w_dim = self.weight_dim[name]
             if 'conv' in name:
                 self.cycle += self._calc_conv_cycle(w_dim, o_dim)
-            else
+            else:
+                self.cycle += self._calc_fc_cycle(w_dim, o_dim)
     
-    def _calc_conv_cycle(self):
+    def _calc_conv_cycle(self, w_dim, o_dim):
+        pe_row = self.pe_array_dim['h']
+        pe_col = self.pe_array_dim['w']
+        i_prec_s = self.pe.input_precision_s
 
-    
+        in_channel_cycle = self.weight_dim[2] / self.PE_GROUP_SIZE
+        out_channel_cycle = self.weight_dim[2] / pe_row 
+        out_width_cycle = self.output_dim[1] / pe_col
+        total_cycle = in_channel_cycle*out_channel_cycle*out_width_cycle*self.weight_dim[0]*self.weight_dim[1]*self.output_dim[2]*self.output_dim[0]
+
+
+
+    def _calc_fc_cycle(self):
+        pass
+
     def _init_mem(self):
         w_sram_bank = 16 # one bank feeds 2 PE rows
         w_sram_config = {

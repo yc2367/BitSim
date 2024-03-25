@@ -18,9 +18,9 @@ class Accelerator:
         self.pe            = pe
         self.pe_array_dim  = pe_array_dim
         self.pe_array      = PEArray(pe, pe_array_dim)
-        (self.weight_dim, 
-         self.input_dim, 
-         self.output_dim,
+        (self.weight_dim, # format: {layer_name: [k, k, in_channel, out_channel], ...}
+         self.input_dim,  # format: {layer_name: [batch_size, width, height, in_channel], ...}
+         self.output_dim, # format: {layer_name: [batch_size, width, height, out_channel], ...}
          self.layer_name_list) = self._init_model_profiler(model_name, model)
         
         # number of cycles for inference
