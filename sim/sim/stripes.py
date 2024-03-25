@@ -1,3 +1,4 @@
+import math
 import torch.nn as nn
 
 from typing import List
@@ -5,7 +6,6 @@ from hw.mem.mem_instance import MemoryInstance
 from hw.alu.alu_unit import BitSerialPE
 from hw.alu.alu_array import BitSerialPEArray
 from hw.accelerator import Accelerator
-from model_profile.meters.dim import DIM
 
 # Stripes accelerator
 class Stripes(Accelerator):
@@ -34,27 +34,101 @@ class Stripes(Accelerator):
     
     def calc_cycle(self):
         for name in self.layer_name_list:
-            o_dim = self.output_dim[name]
             w_dim = self.weight_dim[name]
-            if 'conv' in name:
-                self.cycle += self._calc_conv_cycle(w_dim, o_dim)
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            print(name)
+            if len(w_dim) == 4:
+                cin = i_dim[3]
+                cw  = w_dim[2]
+                print(i_dim, w_dim, o_dim)
+                if cin == cw:
+                    self.cycle += self._calc_conv2d_cycle(w_dim, o_dim)
+                else: # depthwise conv
+                    self.cycle += self._calc_dwconv_cycle(w_dim, i_dim, o_dim)
             else:
+                print(i_dim, w_dim, o_dim)
                 self.cycle += self._calc_fc_cycle(w_dim, o_dim)
     
-    def _calc_conv_cycle(self, w_dim, o_dim):
+    def _calc_conv2d_cycle(self, w_dim, o_dim):
+        pe_group_size = self.PE_GROUP_SIZE
         pe_row = self.pe_array_dim['h']
         pe_col = self.pe_array_dim['w']
-        i_prec_s = self.pe.input_precision_s
+        w_prec = self.pe.input_precision_s
 
-        in_channel_cycle = self.weight_dim[2] / self.PE_GROUP_SIZE
-        out_channel_cycle = self.weight_dim[2] / pe_row 
-        out_width_cycle = self.output_dim[1] / pe_col
-        total_cycle = in_channel_cycle*out_channel_cycle*out_width_cycle*self.weight_dim[0]*self.weight_dim[1]*self.output_dim[2]*self.output_dim[0]
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
 
+        # cycle_kernel:       number of cycles to process a kernel
+        # cycle_out_channel:  number of cycles along output channel
+        # cycle_out_width:    number of cycles along output width
+        # cycle_out_height:   number of cycles along output height
+        if cw < pe_group_size:
+            cycle_kernel   = math.ceil(cw * (k**2) / pe_group_size)
+        else:
+            cycle_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        cycle_out_channel  = math.ceil(cout / pe_row)
+        cycle_out_width    = math.ceil(ow / pe_col)
+        cycle_out_height   = oh
 
+        cycle_per_batch = (cycle_kernel * cycle_out_channel * cycle_out_width * cycle_out_height) * w_prec
+        total_cycle = cycle_per_batch * batch_size
+        print(total_cycle)
+        return total_cycle
+    
+    def _calc_dwconv_cycle(self, w_dim, i_dim, o_dim):
+        pe_group_size = self.PE_GROUP_SIZE
+        pe_col = self.pe_array_dim['w']
+        w_prec = self.pe.input_precision_s
 
-    def _calc_fc_cycle(self):
-        pass
+        # kernel size, kernel input channel, output channel
+        _, _, _, cin = i_dim
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        assert cin != cw, 'Not a depth-wise convolution!'
+
+        # cycle_kernel:       number of cycles to process a kernel
+        # cycle_out_channel:  number of cycles along output channel
+        # cycle_out_width:    number of cycles along output width
+        # cycle_out_height:   number of cycles along output height
+        if cw < pe_group_size:
+            cycle_kernel   = math.ceil(cw * (k**2) / pe_group_size)
+        else:
+            cycle_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        cycle_out_channel  = cout
+        cycle_out_width    = math.ceil(ow / pe_col)
+        cycle_out_height   = oh
+
+        cycle_per_batch = (cycle_kernel * cycle_out_channel * cycle_out_width * cycle_out_height) * w_prec
+        total_cycle = cycle_per_batch * batch_size
+        print(total_cycle)
+        return total_cycle
+
+    def _calc_fc_cycle(self, w_dim, o_dim):
+        pe_group_size = self.PE_GROUP_SIZE
+        pe_row = self.pe_array_dim['h']
+        pe_col = self.pe_array_dim['w']
+        w_prec = self.pe.input_precision_s
+
+        # kernel size, input channel, output channel
+        cin, cout = w_dim
+        # batch size, output feature width, output channel
+        batch_size, _ = o_dim
+
+        # cycle_in_channel:   number of cycles along input channel
+        # cycle_out_channel:  number of cycles along output channel
+        cycle_in_channel  = math.ceil(cin / pe_group_size)
+        cycle_out_channel = math.ceil(cout / pe_row)
+        cycle_batch       = math.ceil(batch_size / pe_col)
+
+        total_cycle = (cycle_in_channel * cycle_out_channel * cycle_batch) * w_prec
+        print(total_cycle)
+        return total_cycle
 
     def _init_mem(self):
         w_sram_bank = 16 # one bank feeds 2 PE rows
@@ -104,7 +178,6 @@ class Stripes(Accelerator):
                                     min_r_granularity=64, min_w_granularity=64, 
                                     get_cost_from_cacti=False, double_buffering_support=False)
         
-        print(self.dram.r_cost, self.dram.w_cost)
 
 
     

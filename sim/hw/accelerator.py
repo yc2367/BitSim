@@ -26,7 +26,7 @@ class Accelerator:
         # number of cycles for inference
         self.cycle = 0
         # number of memory access
-        self.num_mem_access = {'w_sram': 0, 'i_sram': 0, 'dram': 0}
+        self.num_mem_access = {'rd_w_sram': 0, 'wr_w_sram': 0, 'rd_i_sram': 0, 'wr_i_sram': 0, 'rd_dram': 0, 'wr_dram': 0}
     
     def _init_model_profiler(self, model_name, model):
         dim_profiler = DIM(model_name, model, device=self.DEVICE, input_size=224)
