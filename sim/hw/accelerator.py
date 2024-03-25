@@ -18,14 +18,28 @@ class Accelerator:
         self.pe            = pe
         self.pe_array_dim  = pe_array_dim
         self.pe_array      = PEArray(pe, pe_array_dim)
-        #self.model_w, self.model_i, self.model_o = self._init_model_profiler(model_name, model)
+        (self.weight_dim, 
+         self.input_dim, 
+         self.output_dim,
+         self.layer_name_list) = self._init_model_profiler(model_name, model)
+        
+        # number of cycles for inference
+        self.cycle = 0
+        # number of memory access
+        self.num_mem_access = {'w_sram': 0, 'i_sram': 0, 'dram': 0}
     
     def _init_model_profiler(self, model_name, model):
-        profiler = DIM(model_name, model, device=self.DEVICE, input_size=224)
-        profiler.fit()
-        return profiler.w_dict, profiler.i_dict, profiler.o_dict
+        dim_profiler = DIM(model_name, model, device=self.DEVICE, input_size=224)
+        dim_profiler.fit()
+        return (dim_profiler.weight_dim, 
+                dim_profiler.input_dim, 
+                dim_profiler.output_dim, 
+                dim_profiler.layer_name_list)
     
-    def init_mem(self):
+    def _init_mem(self):
+        raise NotImplementedError
+    
+    def calc_cycle(self):
         raise NotImplementedError
     
     def get_pe_array_dim(self):

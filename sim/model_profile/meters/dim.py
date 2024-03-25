@@ -12,12 +12,13 @@ def feature_hook(name, state_dict):
 
 class DIM(Profiler):
     def __init__(self, name, model: nn.Module, device, input_size: int, precision=32) -> None:
-        super().__init__(name, model, device, input_size, precision)
+        super().__init__(name, model, device, input_size, precision)  
+        self.layer_name_list = []
 
         # weight, input, output dimension
-        self.w_dict = {}
-        self.i_dict = {}
-        self.o_dict = {}
+        self.weight_dim = {}
+        self.input_dim = {}
+        self.output_dim = {}
 
     def hook(self):
         for n, m in self.model.named_modules():
@@ -35,14 +36,14 @@ class DIM(Profiler):
         k = layer.kernel_size[0]
         cin = layer.in_channels // layer.groups
 
-        self.i_dict[name] = [bi, wi, hi, ci]
-        self.o_dict[name] = [bo, wo, ho, co]
-        self.w_dict[name] = [k, k, cin, co]
+        self.input_dim[name] = [bi, wi, hi, ci]
+        self.output_dim[name] = [bo, wo, ho, co]
+        self.weight_dim[name] = [k, k, cin, co]
 
     def linear_dim(self, layer:nn.Linear, name):
-        self.i_dict[name] = [layer.in_features]
-        self.o_dict[name] = [layer.out_features]
-        self.w_dict[name] = [layer.in_features, layer.out_features]
+        self.input_dim[name] = [layer.in_features]
+        self.output_dim[name] = [layer.out_features]
+        self.weight_dim[name] = [layer.in_features, layer.out_features]
 
     def fit(self):
         super().forward()
@@ -50,8 +51,10 @@ class DIM(Profiler):
         for n, m in self.model.named_modules():
             if isinstance(m, nn.Conv2d):
                 self.conv_dim(m, n)
+                self.layer_name_list.append(n)
             elif isinstance(m, nn.Linear):
                 self.linear_dim(m, n)
+                self.layer_name_list.append(n)
             else:
                 print(f"{type(m)} will be ignored for dim calculation")
 

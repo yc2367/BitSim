@@ -15,8 +15,8 @@ class Stripes(Accelerator):
     PE_AREA = 1
 
     def __init__(self, 
-                 input_precision_s: int, 
-                 input_precision_p: int,
+                 input_precision_s: int, # bit-serial operand precision
+                 input_precision_p: int, # bit-parallel operand precision
                  pe_array_dim: List[int],
                  model_name: str,
                  model: nn.Module):
@@ -30,9 +30,20 @@ class Stripes(Accelerator):
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          self.PE_GROUP_SIZE, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, self.pe_array_dim, model_name, model)
-        self.init_mem()
+        self._init_mem()
     
-    def init_mem(self):
+    def calc_cycle(self):
+        for name in self.layer_name_list:
+            o_dim = self.output_dim[name]
+            w_dim = self.weight_dim[name]
+            if 'conv' in name:
+                self.cycle += self._calc_conv_cycle(w_dim, o_dim)
+            else
+    
+    def _calc_conv_cycle(self):
+
+    
+    def _init_mem(self):
         w_sram_bank = 16 # one bank feeds 2 PE rows
         w_sram_config = {
                             'technology': 0.028,
@@ -63,7 +74,25 @@ class Stripes(Accelerator):
         self.i_sram = MemoryInstance('i_sram', i_sram_config, 
                                      r_cost=0, w_cost=0, latency=1, area=0, 
                                      min_r_granularity=64, min_w_granularity=128, 
-                                     get_cost_from_cacti=True, double_buffering_support=False)    
+                                     get_cost_from_cacti=True, double_buffering_support=False)
+        
+        dram_config = {
+                        'technology': 0.028,
+                        'mem_type': 'dram', 
+                        'size': 1e9 * 8, 
+                        'bank_count': 1, 
+                        'rw_bw': 64,
+                        'r_port': 0, 
+                        'w_port': 0, 
+                        'rw_port': 1,
+                    }
+        self.dram = MemoryInstance('dram', dram_config, 
+                                    r_cost=545, w_cost=560, latency=1, area=0, 
+                                    min_r_granularity=64, min_w_granularity=64, 
+                                    get_cost_from_cacti=False, double_buffering_support=False)
+        
+        print(self.dram.r_cost, self.dram.w_cost)
+
 
     
 
