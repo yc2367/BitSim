@@ -3,6 +3,7 @@ weight & input/output dimension profiler
 """
 
 import torch.nn as nn
+from torchvision.models import resnet
 from model_profile.meters.profiler import Profiler
 
 def feature_hook(name, state_dict):
@@ -24,7 +25,7 @@ class DIM(Profiler):
         for n, m in self.model.named_modules():
             m.register_forward_hook(feature_hook(n, self.feature_dict))
 
-    def conv_dim(self, layer:nn.Conv2d, name:str):
+    def conv_dim(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         
@@ -40,7 +41,7 @@ class DIM(Profiler):
         self.output_dim[name] = [bo, wo, ho, co]
         self.weight_dim[name] = [k, k, cin, co]
 
-    def linear_dim(self, layer:nn.Linear, name):
+    def linear_dim(self, layer: nn.Linear, name):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         bi, ci = i_feature.shape
@@ -48,6 +49,17 @@ class DIM(Profiler):
         self.input_dim[name] = [bi, ci]
         self.output_dim[name] = [bo, co]
         self.weight_dim[name] = [ci, co]
+    
+    def bottleneck_dim(self, layer: resnet.Bottleneck, name):
+        i_feature = self.feature_dict[name][0]
+        o_feature = self.feature_dict[name][1]
+        # size
+        bi, ci, hi, wi = i_feature.shape
+        bo, co, ho, wo = o_feature.shape
+
+        self.weight_dim[name] = None
+        self.input_dim[name] = [bi, wi, hi, ci]
+        self.output_dim[name] = [bo, wo, ho, co]
 
     def fit(self):
         super().forward()
@@ -58,6 +70,9 @@ class DIM(Profiler):
                 self.layer_name_list.append(n)
             elif isinstance(m, nn.Linear):
                 self.linear_dim(m, n)
+                self.layer_name_list.append(n)
+            elif isinstance(m, resnet.Bottleneck):
+                self.bottleneck_dim(m, n)
                 self.layer_name_list.append(n)
             else:
                 print(f"{type(m)} will be ignored for dim calculation")

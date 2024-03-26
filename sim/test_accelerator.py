@@ -7,7 +7,14 @@ model = model()
 if __name__ == "__main__":
     acc = Stripes(8, 8, [32, 16],'mobilenet_v2', model)
     acc.calc_cycle()
-    print(acc.get_pe_array_dim(), '\n', acc.pe.get_energy())
-    print(acc.pe_array.dimension)
-    print(acc.w_sram.r_cost, acc.w_sram.w_cost)
+    compute_energy = acc.calc_compute_energy() / 1e6
+    sram_rd_energy = acc.calc_sram_rd_energy() / 1e6
+    sram_wr_energy = acc.calc_sram_wr_energy() / 1e6
+    dram_energy    = acc.calc_dram_energy() / 1e6
+    total_energy = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
+    print(f'compute energy: {compute_energy} uJ')
+    print(f'sram rd energy: {sram_rd_energy} uJ')
+    print(f'sram wr energy: {sram_wr_energy} uJ')
+    print(f'dram energy: {dram_energy} uJ')
+    print(f'total energy: {total_energy} uJ')
     

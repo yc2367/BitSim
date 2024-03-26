@@ -23,8 +23,6 @@ class Accelerator:
          self.output_dim, # format: {layer_name: [batch_size, width, height, out_channel], ...}
          self.layer_name_list) = self._init_model_profiler(model_name, model)
         
-        # number of cycles for inference
-        self.cycle = 0
         # number of memory access
         self.num_mem_access = {'rd_w_sram': 0, 'wr_w_sram': 0, 'rd_i_sram': 0, 'wr_i_sram': 0, 'rd_dram': 0, 'wr_dram': 0}
     

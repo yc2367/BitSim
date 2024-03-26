@@ -60,13 +60,13 @@ class MemoryInstance:
             self.r_cost_min = self.r_cost
         else:
             self.r_bw_min = min_r_granularity
-            self.r_cost_min = self.r_cost / (self.rw_bw / self.r_bw_min)
+            self.r_cost_min = self.r_cost / (self.rw_bw / self.r_bw_min) * 2
         if not min_w_granularity:
             self.w_bw_min = mem_config['rw_bw']
             self.w_cost_min = self.w_cost
         else:
             self.w_bw_min = min_w_granularity
-            self.w_cost_min = self.w_cost / (self.rw_bw / self.w_bw_min)
+            self.w_cost_min = self.w_cost / (self.rw_bw / self.w_bw_min) * 2
     
     def get_cacti_cost(self):
         cost = {}
@@ -117,8 +117,8 @@ if __name__ == "__main__":
                   'rw_port': 0,
                   }
         mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, 128, True, False)
-    print(f'read cost: {mem.r_cost} nJ, write cost: {mem.w_cost} nJ, ' + 
-          f'read min cost: {mem.r_cost_min}, write min cost: {mem.w_cost_min} nJ, ' + 
+    print(f'read cost: {mem.r_cost} pJ, write cost: {mem.w_cost} pJ, ' + 
+          f'read min cost: {mem.r_cost_min} pJ, write min cost: {mem.w_cost_min} pJ, ' + 
           f'area: {mem.area}, latency: {mem.latency}')
     '''
     name: str,

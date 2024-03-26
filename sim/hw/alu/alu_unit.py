@@ -191,7 +191,6 @@ class BitSerialPE(PE):
         if ( area == 0 ):
             print(f'ERROR! You must provide the area of a PE.')
             exit(1)
-        input_precision = [input_precision_s, input_precision_p]
         self.input_precision_s = input_precision_s
         self.input_precision_p = input_precision_p
-        super().__init__(input_precision, group_size, energy_cost, area)
+        super().__init__([input_precision_s, input_precision_p], group_size, energy_cost, area)

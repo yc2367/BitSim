@@ -26,7 +26,6 @@ class OperationalArray:
             for idx, (name, size) in enumerate(dimension.items())
         ]
         self.dimension_size = [dim.size for dim in self.dimension]
-        self.num_dimension = len(self.dimension)
 
     def __eq__(self, __o: object) -> bool:
         if not isinstance(__o, OperationalArray):
