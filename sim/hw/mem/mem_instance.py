@@ -60,13 +60,13 @@ class MemoryInstance:
             self.r_cost_min = self.r_cost
         else:
             self.r_bw_min = min_r_granularity
-            self.r_cost_min = self.r_cost / (self.rw_bw / self.r_bw_min) * 2
+            self.r_cost_min = self.r_cost / (self.rw_bw / self.r_bw_min)
         if not min_w_granularity:
             self.w_bw_min = mem_config['rw_bw']
             self.w_cost_min = self.w_cost
         else:
             self.w_bw_min = min_w_granularity
-            self.w_cost_min = self.w_cost / (self.rw_bw / self.w_bw_min) * 2
+            self.w_cost_min = self.w_cost / (self.rw_bw / self.w_bw_min)
     
     def get_cacti_cost(self):
         cost = {}
