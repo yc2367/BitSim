@@ -11,4 +11,4 @@ hardware/tmp/*
 hardware/run.tcl
 save/*
 *.pth.tar
-
+*.log
