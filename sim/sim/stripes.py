@@ -34,22 +34,9 @@ class Stripes(Accelerator):
         self._init_mem()
     
     def calc_cycle(self):
-        cycle = 0
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            i_dim = self.input_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    cin = i_dim[3]
-                    cw  = w_dim[2]
-                    if cin == cw:
-                        cycle += self._calc_conv2d_cycle(w_dim, o_dim)
-                    else: # depthwise conv
-                        cycle += self._calc_dwconv_cycle(w_dim, i_dim, o_dim)
-                else:
-                    cycle += self._calc_fc_cycle(w_dim, o_dim)
-        return cycle
+        w_prec = self.pe.input_precision_s
+        total_tile = self.calc_pe_array_tile()
+        return total_tile * w_prec
     
     def num_mem_refetch(self, w_dim, i_dim):
         # If the on-chip buffer size is not big enough, 
@@ -141,37 +128,53 @@ class Stripes(Accelerator):
                 energy += self._calc_residual_dram_energy(o_dim)
         return energy
     
-    def _calc_conv2d_cycle(self, w_dim, o_dim):
+    def calc_pe_array_tile(self):
+        total_tile = 0
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    cin = i_dim[3]
+                    cw  = w_dim[2]
+                    if cin == cw: 
+                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
+                    else: # depthwise conv
+                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
+                else:
+                    total_tile += self._calc_fc_tile(w_dim, o_dim)
+        return total_tile
+    
+    def _calc_conv2d_tile(self, w_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
 
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
         # batch size, output feature width, output feature height, output channel
         batch_size, ow, oh, _ = o_dim
 
-        # cycle_kernel: number of cycles to process a kernel
-        # cycle_cout:   number of cycles along output channel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
         if ( k**2 > cw ):
-            cycle_kernel   = math.ceil((k**2) / pe_group_size) * cw
+            tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
         else:
-            cycle_kernel   = math.ceil(cw / pe_group_size) * (k**2)
-        cycle_cout  = math.ceil(cout / num_pe_row)
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
+            tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        tile_cout  = math.ceil(cout / num_pe_row)
+        tile_ow    = math.ceil(ow / num_pe_col)
+        tile_oh    = oh
 
-        cycle_per_batch = (cycle_kernel * cycle_cout * cycle_ow * cycle_oh) * w_prec
-        total_cycle = cycle_per_batch * batch_size
-        return total_cycle
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
     
-    def _calc_dwconv_cycle(self, w_dim, i_dim, o_dim):
+    def _calc_dwconv_tile(self, w_dim, i_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
 
         # kernel size, kernel input channel, output channel
         _, _, _, cin = i_dim
@@ -182,38 +185,37 @@ class Stripes(Accelerator):
 
         assert cin != cw, 'Not a depth-wise convolution!'
 
-        # cycle_kernel: number of cycles to process a kernel
-        # cycle_cout:   number of cycles along output channel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
-        cycle_kernel   = math.ceil((k**2) / pe_group_size) * cw
-        cycle_cout  = cout
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
+        tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
+        tile_cout  = cout
+        tile_ow    = math.ceil(ow / num_pe_col)
+        tile_oh    = oh
 
-        cycle_per_batch = (cycle_kernel * cycle_cout * cycle_ow * cycle_oh) * w_prec
-        total_cycle = cycle_per_batch * batch_size
-        return total_cycle
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
 
-    def _calc_fc_cycle(self, w_dim, o_dim):
+    def _calc_fc_tile(self, w_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
 
         # input channel, output channel
         cin, cout = w_dim
         # batch size, output channel
         batch_size, _ = o_dim
 
-        # cycle_in_channel:   number of cycles along input channel
-        # cycle_cout:  number of cycles along output channel
-        cycle_in_channel  = math.ceil(cin / pe_group_size)
-        cycle_cout        = math.ceil(cout / num_pe_row)
-        cycle_batch       = math.ceil(batch_size / num_pe_col)
+        # tile_in_channel:   number of tiles along input channel
+        # tile_cout:  number of tiles along output channel
+        tile_in_channel  = math.ceil(cin / pe_group_size)
+        tile_cout        = math.ceil(cout / num_pe_row)
+        tile_batch       = math.ceil(batch_size / num_pe_col)
 
-        total_cycle = (cycle_in_channel * cycle_cout * cycle_batch) * w_prec
-        return total_cycle
+        total_tile = (tile_in_channel * tile_cout * tile_batch)
+        return total_tile
     
     def _calc_residual_sram_energy(self, o_dim):
         i_prec = self.pe.input_precision_p
@@ -230,7 +232,6 @@ class Stripes(Accelerator):
         return total_energy
     
     def _calc_conv_sram_wr_energy(self, w_dim, i_dim, num_fetch_w: int=1, num_fetch_i: int=1):
-        pe_group_size = self.pe_dotprod_size
         w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -282,7 +283,6 @@ class Stripes(Accelerator):
     def _calc_conv_dram_energy(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.pe.input_precision_s
         i_prec = self.pe.input_precision_p
-        pe_group_size = self.pe_dotprod_size
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost

@@ -14,7 +14,7 @@ from sim.bin_int_convert import int_to_signMagnitude, int_to_twosComplement
 # Pragmatic accelerator
 class Pragmatic(Accelerator):
 
-    PE_ENERGY = 0.4375 # energy per PE
+    PE_ENERGY = 0.46625 # energy per PE
     W_REG_ENERGY_PER_ROW = 1.01125 # energy (pJ) of the weight shift register file for a PE row
     I_REG_ENERGY_PER_COL = 0.53125 # energy (pJ) of the activation register file for a PE column
     PE_AREA = 1
@@ -56,6 +56,95 @@ class Pragmatic(Accelerator):
                     cycle += self._calc_fc_cycle(name, w_dim, o_dim)
         return cycle
     
+    def calc_pe_array_tile(self):
+        total_tile = 0
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    cin = i_dim[3]
+                    cw  = w_dim[2]
+                    if cin == cw: 
+                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
+                    else: # depthwise conv
+                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
+                else:
+                    total_tile += self._calc_fc_tile(w_dim, o_dim)
+        return total_tile
+    
+    def _calc_conv2d_tile(self, w_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
+        if ( k**2 > cw ):
+            tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
+        else:
+            tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        tile_cout  = math.ceil(cout / num_pe_row)
+        tile_ow    = math.ceil(ow / num_pe_col)
+        tile_oh    = oh
+
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
+    
+    def _calc_dwconv_tile(self, w_dim, i_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        _, _, _, cin = i_dim
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        assert cin != cw, 'Not a depth-wise convolution!'
+
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
+        tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
+        tile_cout  = cout
+        tile_ow    = math.ceil(ow / num_pe_col)
+        tile_oh    = oh
+
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
+
+    def _calc_fc_tile(self, w_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # input channel, output channel
+        cin, cout = w_dim
+        # batch size, output channel
+        batch_size, _ = o_dim
+
+        # tile_in_channel:   number of tiles along input channel
+        # tile_cout:  number of tiles along output channel
+        tile_in_channel  = math.ceil(cin / pe_group_size)
+        tile_cout        = math.ceil(cout / num_pe_row)
+        tile_batch       = math.ceil(batch_size / num_pe_col)
+
+        total_tile = (tile_in_channel * tile_cout * tile_batch)
+        return total_tile
+        
     def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
@@ -162,8 +251,8 @@ class Pragmatic(Accelerator):
                         tile_k = tile_cw[:, l_ti_k:]
                     cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
                     cycle_kernel += int(cycle_tile_k.item())
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
+        cycle_ow = math.ceil(ow / num_pe_col)
+        cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
         total_cycle = cycle_per_batch * batch_size
@@ -251,27 +340,25 @@ class Pragmatic(Accelerator):
             return 1, 1
         
     def calc_compute_energy(self):
-        w_prec = self.pe.input_precision_s
         num_pe = self.pe_array.total_unit_count
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
         num_cycle = self.calc_cycle()
+        num_tile = self.calc_pe_array_tile()
 
         pe_energy = self.PE_ENERGY * num_pe * num_cycle
         w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle
-        # The activation register is accessed every w_prec cycles
-        i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_cycle / w_prec
+        # The activation register is accessed every tile
+        i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_tile
         compute_energy = pe_energy + w_reg_energy + i_reg_energy
-
         return compute_energy
     
     def calc_sram_rd_energy(self):
-        w_prec = self.pe.input_precision_s
         w_sram_rd_cost = self.w_sram.r_cost
         i_sram_rd_cost = self.i_sram.r_cost
-        num_cycle = self.calc_cycle()
+        num_tile = self.calc_pe_array_tile()
 
-        total_energy = math.ceil(num_cycle / w_prec) * (w_sram_rd_cost + i_sram_rd_cost)
+        total_energy = num_tile * (w_sram_rd_cost + i_sram_rd_cost)
         for name in self.layer_name_list:
             w_dim = self.weight_dim[name]
             o_dim = self.output_dim[name]
@@ -328,7 +415,6 @@ class Pragmatic(Accelerator):
         return total_energy
     
     def _calc_conv_sram_wr_energy(self, w_dim, i_dim, num_fetch_w: int=1, num_fetch_i: int=1):
-        pe_group_size = self.pe_dotprod_size
         w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -380,7 +466,6 @@ class Pragmatic(Accelerator):
     def _calc_conv_dram_energy(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.pe.input_precision_s
         i_prec = self.pe.input_precision_p
-        pe_group_size = self.pe_dotprod_size
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost

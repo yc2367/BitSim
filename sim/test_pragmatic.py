@@ -2,7 +2,7 @@ from sim.pragmatic import Pragmatic
 from model_profile.models.models import MODEL
 
 name_list = ['resnet50', 'mobilenet_v2']
-name = name_list[0]
+name = name_list[1]
 model = MODEL[name]
 model = model()
 
