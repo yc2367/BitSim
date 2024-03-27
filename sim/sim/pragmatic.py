@@ -1,4 +1,5 @@
 import math
+import torch
 import torch.nn as nn
 import numpy as np
 
@@ -6,12 +7,15 @@ from typing import List
 from hw.mem.mem_instance import MemoryInstance
 from hw.alu.alu_unit import BitSerialPE
 from hw.accelerator import Accelerator
+from sim.model_quantized import MODEL
 
-# Stripes accelerator
-class Stripes(Accelerator):
+from sim.bin_int_convert import int_to_signMagnitude, int_to_twosComplement
 
-    PE_ENERGY = 0.30125 # energy per PE
-    W_REG_ENERGY_PER_ROW = 0.4675 # energy (pJ) of the weight shift register file for a PE row
+# Pragmatic accelerator
+class Pragmatic(Accelerator):
+
+    PE_ENERGY = 0.4375 # energy per PE
+    W_REG_ENERGY_PER_ROW = 1.01125 # energy (pJ) of the weight shift register file for a PE row
     I_REG_ENERGY_PER_COL = 0.53125 # energy (pJ) of the activation register file for a PE column
     PE_AREA = 1
 
@@ -27,10 +31,11 @@ class Stripes(Accelerator):
         
         self.pe_array_dim = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
         self.pe_dotprod_size   = pe_dotprod_size
-
+        
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, self.pe_array_dim, model_name, model)
+        self.model_q = MODEL[model_name].cpu() # quantized model
         self._init_mem()
     
     def calc_cycle(self):
@@ -43,14 +48,181 @@ class Stripes(Accelerator):
                 if len(w_dim) == 4:
                     cin = i_dim[3]
                     cw  = w_dim[2]
-                    if cin == cw:
-                        cycle += self._calc_conv2d_cycle(w_dim, o_dim)
+                    if cin == cw: 
+                        cycle += self._calc_conv2d_cycle(name, w_dim, o_dim)
                     else: # depthwise conv
-                        cycle += self._calc_dwconv_cycle(w_dim, i_dim, o_dim)
+                        cycle += self._calc_dwconv_cycle(name, w_dim, i_dim, o_dim)
                 else:
-                    cycle += self._calc_fc_cycle(w_dim, o_dim)
+                    cycle += self._calc_fc_cycle(name, w_dim, o_dim)
         return cycle
     
+    def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
+        # wq_b dimension: [bit_significance, cout, k, k, cw]
+        wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
+        wq_b = wq_b[1:, :, :, :, :]
+
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        # cycle_kernel: number of cycles to process a kernel
+        # cycle_ow:     number of cycles along output width
+        # cycle_oh:     number of cycles along output height
+        cycle_kernel = 0
+        iter_cout  = math.ceil(cout / num_pe_row)
+        for ti_cout in range(iter_cout):
+            l_ti_cout = ti_cout * num_pe_row
+            u_ti_cout = (ti_cout+1) * num_pe_row
+            # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
+            if ( u_ti_cout <= cout ):
+                tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :, :, :]
+            else:
+                tile_cout = wq_b[:, l_ti_cout:,          :, :, :]
+            
+            if ( k**2 > cw ):
+                iter_cw = cw
+                for ti_cw in range(iter_cw):
+                    # get the tile along kernel input channel: [bit_significance, tile_cout, k, k]
+                    tile_cw = tile_cout[:, :, :, :, ti_cw]
+                    tile_cw = tile_cw.flatten(start_dim=2, end_dim=3)
+                    iter_k  = math.ceil(k**2 / pe_group_size)
+                    for ti_k in range(iter_k):
+                        l_ti_k = ti_k * pe_group_size
+                        u_ti_k = (ti_k+1) * pe_group_size
+                        if ( u_ti_k <= k**2 ):
+                            tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
+                        else:
+                            tile_k = tile_cw[:, :, l_ti_k:]
+                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
+                        cycle_kernel += int(cycle_tile_k.item())
+            else:
+                for tk1 in range(k):
+                    for tk2 in range(k):
+                        # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
+                        tile_k = tile_cout[:, :, tk1, tk2, :]
+                        iter_cw = math.ceil(cw / pe_group_size)
+                        for ti_cw in range(iter_cw):
+                            l_ti_cw = ti_cw * pe_group_size
+                            u_ti_cw = (ti_cw+1) * pe_group_size
+                            if ( u_ti_cw <= cw ):
+                                tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+                            else:
+                                tile_cw = tile_k[:, :, l_ti_cw:]
+                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
+                            cycle_kernel += int(cycle_tile_cw.item())
+        cycle_ow    = math.ceil(ow / num_pe_col)
+        cycle_oh    = oh
+
+        cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
+        total_cycle = cycle_per_batch * batch_size
+        return total_cycle
+    
+    def _calc_dwconv_cycle(self, layer_name, w_dim, i_dim, o_dim):
+        # wq_b dimension: [bit_significance, cout, k, k, cw]
+        wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
+        wq_b = wq_b[1:, :, :, :, :]
+
+        pe_group_size = self.pe_dotprod_size
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        _, _, _, cin = i_dim
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        assert cin != cw, 'Not a depth-wise convolution!'
+
+        # cycle_kernel: number of cycles to process a kernel
+        # cycle_ow:     number of cycles along output width
+        # cycle_oh:     number of cycles along output height
+        cycle_kernel = 0
+        iter_cout  = math.ceil(cout)
+        for ti_cout in range(iter_cout):
+            # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
+            tile_cout = wq_b[:, ti_cout, :, :, :]
+            iter_cw = cw
+            for ti_cw in range(iter_cw):
+                # get the tile along kernel input channel: [bit_significance, tile_cout, k, k]
+                tile_cw = tile_cout[:, :, :, ti_cw]
+                tile_cw = tile_cw.flatten(start_dim=1, end_dim=2)
+                iter_k  = math.ceil(k**2 / pe_group_size)
+                for ti_k in range(iter_k):
+                    l_ti_k = ti_k * pe_group_size
+                    u_ti_k = (ti_k+1) * pe_group_size
+                    if ( u_ti_k <= k**2 ):
+                        tile_k = tile_cw[:, l_ti_k:u_ti_k]
+                    else:
+                        tile_k = tile_cw[:, l_ti_k:]
+                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
+                    cycle_kernel += int(cycle_tile_k.item())
+        cycle_ow    = math.ceil(ow / num_pe_col)
+        cycle_oh    = oh
+
+        cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
+        total_cycle = cycle_per_batch * batch_size
+        return total_cycle
+
+    def _calc_fc_cycle(self, layer_name, w_dim, o_dim):
+        # wq_b dimension: [bit_significance, cout, k, k, cw]
+        wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
+        wq_b = wq_b[1:, :, :]
+
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # input channel, output channel
+        cin, cout = w_dim
+        # batch size, output channel
+        batch_size, _ = o_dim
+
+        # cycle_kernel: number of cycles to process a kernel
+        # cycle_ow:     number of cycles along output width
+        # cycle_oh:     number of cycles along output height
+        cycle_kernel = 0
+        iter_cout  = math.ceil(cout / num_pe_row)
+        for ti_cout in range(iter_cout):
+            l_ti_cout = ti_cout * num_pe_row
+            u_ti_cout = (ti_cout+1) * num_pe_row
+            # get the tile along output channel: [bit_significance, tile_cout, cin]
+            if ( u_ti_cout <= cout ):
+                tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :]
+            else:
+                tile_cout = wq_b[:, l_ti_cout:,          :]
+            
+            iter_cin = math.ceil(cin / pe_group_size)
+            for ti_cin in range(iter_cin):
+                l_ti_cin = ti_cin * pe_group_size
+                u_ti_cin = (ti_cin+1) * pe_group_size
+                if ( u_ti_cin <= cin ):
+                    tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
+                else:
+                    tile_cin = tile_cout[:, :, l_ti_cin:]
+                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0))
+                cycle_kernel += int(cycle_tile_cin.item())
+        cycle_batch = math.ceil(batch_size / num_pe_col)
+
+        total_cycle = cycle_kernel * cycle_batch
+        return total_cycle
+    
+    def _get_quantized_weight(self, layer_name):
+        for name, layer in self.model_q.named_modules():
+            if ( layer_name == name ):
+                w = layer.weight()
+                wq = torch.int_repr(w)
+                wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(wqb_signMagnitude.shape) == 5:
+                    wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
+                return wqb_signMagnitude
+        raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
+
     def num_mem_refetch(self, w_dim, i_dim):
         # If the on-chip buffer size is not big enough, 
         # we need to refetch input tiles or weight tiles from DRAM
@@ -140,80 +312,6 @@ class Stripes(Accelerator):
             else:
                 energy += self._calc_residual_dram_energy(o_dim)
         return energy
-    
-    def _calc_conv2d_cycle(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
-
-        # kernel size, kernel input channel, output channel
-        k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
-
-        # cycle_kernel: number of cycles to process a kernel
-        # cycle_cout:   number of cycles along output channel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
-        if ( k**2 > cw ):
-            cycle_kernel   = math.ceil((k**2) / pe_group_size) * cw
-        else:
-            cycle_kernel   = math.ceil(cw / pe_group_size) * (k**2)
-        cycle_cout  = math.ceil(cout / num_pe_row)
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
-
-        cycle_per_batch = (cycle_kernel * cycle_cout * cycle_ow * cycle_oh) * w_prec
-        total_cycle = cycle_per_batch * batch_size
-        return total_cycle
-    
-    def _calc_dwconv_cycle(self, w_dim, i_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
-
-        # kernel size, kernel input channel, output channel
-        _, _, _, cin = i_dim
-        # kernel size, kernel input channel, output channel
-        k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
-
-        assert cin != cw, 'Not a depth-wise convolution!'
-
-        # cycle_kernel: number of cycles to process a kernel
-        # cycle_cout:   number of cycles along output channel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
-        cycle_kernel   = math.ceil((k**2) / pe_group_size) * cw
-        cycle_cout  = cout
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
-
-        cycle_per_batch = (cycle_kernel * cycle_cout * cycle_ow * cycle_oh) * w_prec
-        total_cycle = cycle_per_batch * batch_size
-        return total_cycle
-
-    def _calc_fc_cycle(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
-        w_prec = self.pe.input_precision_s
-
-        # input channel, output channel
-        cin, cout = w_dim
-        # batch size, output channel
-        batch_size, _ = o_dim
-
-        # cycle_in_channel:   number of cycles along input channel
-        # cycle_cout:  number of cycles along output channel
-        cycle_in_channel  = math.ceil(cin / pe_group_size)
-        cycle_cout        = math.ceil(cout / num_pe_row)
-        cycle_batch       = math.ceil(batch_size / num_pe_col)
-
-        total_cycle = (cycle_in_channel * cycle_cout * cycle_batch) * w_prec
-        return total_cycle
     
     def _calc_residual_sram_energy(self, o_dim):
         i_prec = self.pe.input_precision_p

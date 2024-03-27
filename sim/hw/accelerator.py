@@ -15,6 +15,7 @@ class Accelerator:
                  pe_array_dim: Dict[str, int],
                  model_name: str,
                  model: nn.Module):
+        self.model_name    = model_name
         self.pe            = pe
         self.pe_array_dim  = pe_array_dim
         self.pe_array      = PEArray(pe, pe_array_dim)

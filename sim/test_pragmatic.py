@@ -1,12 +1,15 @@
-from sim.stripes import Stripes 
+from sim.pragmatic import Pragmatic 
 from model_profile.models.models import MODEL
 
-model = MODEL['mobilenet_v2']
+name_list = ['resnet50', 'mobilenet_v2']
+name = name_list[0]
+model = MODEL[name]
 model = model()
 
 if __name__ == "__main__":
-    acc = Stripes(8, 8, [32, 16],'mobilenet_v2', model)
-    acc.calc_cycle()
+    acc = Pragmatic(8, 8, 16, [32, 16], name, model)
+    print(f'total cycle: {acc.calc_cycle()}')
+    
     compute_energy = acc.calc_compute_energy() / 1e6
     sram_rd_energy = acc.calc_sram_rd_energy() / 1e6
     sram_wr_energy = acc.calc_sram_wr_energy() / 1e6
@@ -17,4 +20,5 @@ if __name__ == "__main__":
     print(f'sram wr energy: {sram_wr_energy} uJ')
     print(f'dram energy: {dram_energy} uJ')
     print(f'total energy: {total_energy} uJ')
+    
     

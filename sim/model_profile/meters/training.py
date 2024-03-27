@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 
 from model_profile.meters.profiler import Profiler
-from model_profile.meters.utils import AverageMeter
 from thop import profile
 
 from tqdm import tqdm

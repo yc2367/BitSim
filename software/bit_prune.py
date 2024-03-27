@@ -9,7 +9,7 @@ from torchvision.models.quantization import (ResNet18_QuantizedWeights,
                                              ResNet50_QuantizedWeights)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', choices = ['resnet18', 'resnet50', 'mobilenet'])
+parser.add_argument('--model', choices = ['resnet18', 'resnet50', 'mobilenet_v2'])
 args = parser.parse_args()
 
 model_name = args.model
@@ -20,7 +20,7 @@ if model_name == 'resnet18':
 elif model_name == 'resnet50':
     weights = ResNet50_QuantizedWeights
     model = torchvision.models.quantization.resnet50(weights = weights, quantize=True)
-elif model_name == 'mobilenet':
+elif model_name == 'mobilenet_v2':
     weights = MobileNet_V2_QuantizedWeights
     model = torchvision.models.quantization.mobilenet_v2(weights = weights, quantize=True)
 else:
