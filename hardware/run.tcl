@@ -1,16 +1,16 @@
-set tsmc28 /pdks/tsmc/tsmc-28nm-cln28hpc-nda/stdview
-set workdir /home/yc2367/Desktop/Research/BitSim/hardware
-set_app_var target_library "$tsmc28/stdcells.db"
+set tsmc28 "/opt/PDKs/TSMC/28nm/Std_Cell_Lib/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Front_End/timing_power_noise/NLDM/tcbn28hpcplusbwp30p140_180a"
+set workdir /home/yc2367/Research/BitSim/hardware
+set_app_var target_library "$tsmc28/tcbn28hpcplusbwp30p140ssg0p9vm40c.db"
 set_app_var link_library   "* $target_library"
 
 set run_module 0 ;
-set bit_func 3 ;
+set bit_func 2 ;
 set group_size 16 ;
 
 if {$run_module == 1} {
     analyze -format sverilog $workdir/scheduler_pragmatic.v
     elaborate scheduler_pragmatic
-    #set_load 0.02 [all_outputs]
+    set_load 0.02 [all_outputs]
 } else {
     if {$bit_func == 0} {
         if {$group_size == 16} {

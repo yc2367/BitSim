@@ -1,7 +1,7 @@
-`ifndef __p_encoder_16to4_V__
-`define __p_encoder_16to4_V__
+`ifndef __pencoder_16to4_V__
+`define __pencoder_16to4_V__
 
-module p_encoder_16to4_clk
+module pencoder_16to4_clk
 (
     input  logic [15:0] bitmas,     
     output logic [3:0]  ou,

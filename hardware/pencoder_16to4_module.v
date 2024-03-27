@@ -1,9 +1,9 @@
-`ifndef __p_encoder_16to4_module_V__
-`define __p_encoder_16to4_module_V__
+`ifndef __pencoder_16to4_module_V__
+`define __pencoder_16to4_module_V__
 
-`include "p_encoder_8to3.v"
+`include "pencoder_8to3.v"
 
-module p_encoder_16to4_module
+module pencoder_16to4_module
 (
     input  logic [15:0] bitmas,     
     output logic [3:0]  ou,
@@ -18,8 +18,8 @@ logic [3:0]  out;
     logic        valid_H, valid_L;
     assign bitmask_H = bitmask[15:8];
     assign bitmask_L = bitmask[7:0];
-    p_encoder_8to3 encoder_H (.bitmask(bitmask_H), .out(out_H), .is_zero(valid_H));
-    p_encoder_8to3 encoder_L (.bitmask(bitmask_L), .out(out_L), .is_zero(valid_L));
+    pencoder_8to3 encoder_H (.bitmask(bitmask_H), .out(out_H), .is_zero(valid_H));
+    pencoder_8to3 encoder_L (.bitmask(bitmask_L), .out(out_L), .is_zero(valid_L));
     assign is_zero = valid_H | valid_L;
 
     always_comb begin

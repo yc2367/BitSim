@@ -1,7 +1,7 @@
-`ifndef __p_encoder_7to3_V__
-`define __p_encoder_7to3_V__
+`ifndef __pencoder_7to3_V__
+`define __pencoder_7to3_V__
 
-module p_encoder_7to3
+module pencoder_7to3
 (
     input  logic [6:0]  bitmask,     
     output logic [2:0]  out,

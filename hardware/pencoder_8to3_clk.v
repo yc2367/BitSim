@@ -1,7 +1,7 @@
-`ifndef __p_encoder_8to3_V__
-`define __p_encoder_8to3_V__
+`ifndef __pencoder_8to3_V__
+`define __pencoder_8to3_V__
 
-module p_encoder_8to3_clk
+module pencoder_8to3_clk
 (
     input  logic [7:0]  bitmas,     
     output logic [2:0]  ou,

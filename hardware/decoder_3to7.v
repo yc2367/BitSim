@@ -1,7 +1,7 @@
-`ifndef __decoder_3to5_V__
-`define __decoder_3to5_V__
+`ifndef __decoder_3to7_V__
+`define __decoder_3to7_V__
 
-module decoder_3to5
+module decoder_3to7
 (
     input  logic [2:0]  in,     
     input  logic        val,     

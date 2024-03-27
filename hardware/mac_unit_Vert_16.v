@@ -200,7 +200,7 @@ module mac_unit_Vert_16_clk
 ) (
 	input  logic                               clk,
 	input  logic                               reset,
-	input  logic                               en,
+	input  logic                               en_acc,
 	input  logic                               load_accum,
 
 	input  logic signed   [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0],   // input activation (signed)
