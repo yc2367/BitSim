@@ -5,7 +5,7 @@ module decoder_4to16
 (
     input  logic [3:0]   i,     
     output logic [15:0]  ou,
-    input  logic        clk,
+    input  logic         clk,
     input  logic reset
 );
 logic [15:0]  out;

@@ -1,7 +1,7 @@
-`ifndef __p_encoder_8to3_V__
-`define __p_encoder_8to3_V__
+`ifndef __pencoder_5to3_V__
+`define __pencoder_5to3_V__
 
-module p_encoder_8to3
+module pencoder_5to3
 (
     input  logic [4:0]  bitmask,     
     output logic [2:0]  out,
@@ -11,6 +11,7 @@ module p_encoder_8to3
 
     always_comb begin
         casez (bitmask)
+            5'b00000:  out = 3'b000;
             5'b00001:  out = 3'b100;
             5'b0001?:  out = 3'b011;
             5'b001??:  out = 3'b010;
