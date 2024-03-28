@@ -43,4 +43,36 @@ class Accelerator:
     
     def get_pe_array_dim(self):
         return self.pe_array.dimension
+
+
+class BitSerialAccelerator(Accelerator):
+    ### Global variable
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+    def __init__(self, 
+                 pe: PE,
+                 pe_array_dim: Dict[str, int],
+                 model_name: str,
+                 model: nn.Module):
+        super().__init__(pe, pe_array_dim, model_name, model)
+    
+    def calc_pe_array_tile(self):
+        total_tile = 0
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    cin = i_dim[3]
+                    cw  = w_dim[2]
+                    if cin == cw: 
+                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
+                    else: # depthwise conv
+                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
+                else:
+                    total_tile += self._calc_fc_tile(w_dim, o_dim)
+        return total_tile
+    
+    
     
