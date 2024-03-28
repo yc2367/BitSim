@@ -3,14 +3,18 @@ set workdir /home/yc2367/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/tcbn28hpcplusbwp30p140ssg0p9vm40c.db"
 set_app_var link_library   "* $target_library"
 
-set run_module 0 ;
-set bit_func 2 ;
+set run_module 1 ;
+set bit_func 0 ;
 set group_size 16 ;
 
+set add_load 1 ;
+
 if {$run_module == 1} {
-    analyze -format sverilog $workdir/scheduler_pragmatic.v
-    elaborate scheduler_pragmatic
-    set_load 0.02 [all_outputs]
+    analyze -format sverilog $workdir/reg_file.v
+    elaborate reg_file
+    if {$add_load == 1} {
+        set_load 0.02 [all_outputs]
+    }
 } else {
     if {$bit_func == 0} {
         if {$group_size == 16} {
