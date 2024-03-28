@@ -27,12 +27,24 @@ class Pragmatic(Stripes):
                  pe_array_dim: List[int],
                  model_name: str,
                  model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
-        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, pe_array_dim, model_name, model)
         self.model_q = MODEL[model_name].cpu() # quantized model
+        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, pe_array_dim, model_name, model)
     
     def calc_cycle(self):
-        cycle = 0
+        total_cycle = 0
+        total_cycle_compute = 0
         for name in self.layer_name_list:
+            cycle_layer_compute = self._layer_cycle_compute[name]
+            cycle_layer_dram    = self._layer_cycle_dram[name]
+            print(cycle_layer_compute, cycle_layer_dram)
+            total_cycle_compute += cycle_layer_compute
+            total_cycle += max(cycle_layer_compute, cycle_layer_dram)
+        return total_cycle_compute, total_cycle
+    
+    def _calc_compute_cycle(self):
+        self._layer_cycle_compute = {}
+        for name in self.layer_name_list:
+            cycle_layer_compute = 0
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
@@ -41,13 +53,49 @@ class Pragmatic(Stripes):
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        cycle += self._calc_conv2d_cycle(name, w_dim, o_dim)
+                        cycle_layer_compute = self._calc_conv2d_cycle(name, w_dim, o_dim)
                     else: # depthwise conv
-                        cycle += self._calc_dwconv_cycle(name, w_dim, i_dim, o_dim)
+                        cycle_layer_compute = self._calc_dwconv_cycle(name, w_dim, i_dim, o_dim)
                 else:
-                    cycle += self._calc_fc_cycle(name, w_dim, o_dim)
-        return cycle
-        
+                    cycle_layer_compute = self._calc_fc_cycle(name, w_dim, o_dim)
+                self._layer_cycle_compute[name] = cycle_layer_compute
+            '''
+            else:
+                self._layer_cycle_compute[name] = 0
+            '''
+    
+    def _calc_dram_cycle(self):
+        self._layer_cycle_dram = {}
+        i_prec = self.pe.input_precision_p
+        w_prec_pad = self.pe.input_precision_p
+        dram_bandwidth  = self.dram.rw_bw * 2 # DDR
+        size_sram_i = self.i_sram.size / 8
+        self._read_layer_input = True
+        for name in self.layer_name_list:
+            cycle_layer_dram = 0
+            w_dim = self.weight_dim[name]
+            if w_dim is not None:
+                cycle_dram_load_w = self._w_mem_required[name] * w_prec_pad / dram_bandwidth
+                i_mem_required = self._i_mem_required[name]
+                if self._read_layer_input:
+                    cycle_dram_load_i = i_mem_required * i_prec / dram_bandwidth 
+                else:
+                    cycle_dram_load_i = 0
+
+                o_mem_required = self._o_mem_required[name]
+                if ( i_mem_required + o_mem_required ) < size_sram_i:
+                    cycle_dram_write_o = 0
+                    self._read_layer_input = False
+                else:
+                    cycle_dram_write_o = o_mem_required * i_prec / dram_bandwidth
+                    self._read_layer_input = True
+                cycle_layer_dram = int(cycle_dram_load_w + cycle_dram_write_o + cycle_dram_load_i)
+            '''
+            else:
+                cycle_layer_dram = self._calc_residual_dram_latency(o_dim)
+            '''
+            self._layer_cycle_dram[name] = int(cycle_layer_dram)
+
     def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
@@ -214,60 +262,20 @@ class Pragmatic(Stripes):
                     wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
                 return wqb_signMagnitude
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
-
-    def num_mem_refetch(self, w_dim, i_dim):
-        # If the on-chip buffer size is not big enough, 
-        # we need to refetch input tiles or weight tiles from DRAM
-        size_sram_w = self.w_sram.size / 8
-        size_sram_i  = self.i_sram.size / 8
-        w_mem_required = np.prod(w_dim) * self.pe.input_precision_p / 8
-        i_mem_required = np.prod(i_dim) * self.pe.input_precision_p / 8
-        if ( w_mem_required > size_sram_w ) and ( i_mem_required > size_sram_i ):
-            # need DRAM refetch
-            num_refetch_input = math.ceil(w_mem_required / size_sram_w)
-            num_refetch_weight = math.ceil(i_mem_required / size_sram_i)
-            total_fetch_weight = num_refetch_weight * w_mem_required
-            total_fetch_input = num_refetch_input * i_mem_required
-            #print('Need DRAM refetch ...')
-            #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
-            if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
-                #print(f'Refetch weight for {num_refetch_weight} times ...')
-                # refetch all weight for every input tile
-                return num_refetch_weight, 1 
-            else:
-                #print(f'Refetch input for {num_refetch_input} times ...')
-                # refetch all input for every weight tile
-                return 1, num_refetch_input
-        else:
-            # no need refetch
-            return 1, 1
         
     def calc_compute_energy(self):
         num_pe = self.pe_array.total_unit_count
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
-        num_cycle = self.calc_cycle()
+        num_cycle_compute = self.cycle_compute
         num_tile = self.calc_pe_array_tile()
 
-        pe_energy = self.PE_ENERGY * num_pe * num_cycle
-        w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle
+        pe_energy = self.PE_ENERGY * num_pe * num_cycle_compute
+        w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle_compute
         # The activation register is accessed every tile
         i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_tile
         compute_energy = pe_energy + w_reg_energy + i_reg_energy
         return compute_energy
-    
-    def calc_sram_rd_energy(self):
-        w_sram_rd_cost = self.w_sram.r_cost
-        i_sram_rd_cost = self.i_sram.r_cost
-        num_tile = self.calc_pe_array_tile()
-
-        total_energy = num_tile * (w_sram_rd_cost + i_sram_rd_cost)
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is None:
-                total_energy += self._calc_residual_sram_energy(o_dim)
-        return total_energy
     
     def _init_mem(self):
         w_prec = self.pe.input_precision_p
@@ -275,7 +283,7 @@ class Pragmatic(Stripes):
         w_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 18 * w_sram_bank * 1024*8, 
+                            'size': 9 * w_sram_bank * 1024*8, 
                             'bank_count': w_sram_bank, 
                             'rw_bw': (self.pe_array_dim['h'] * w_prec) * w_sram_bank, 
                             'r_port': 1, 
@@ -292,7 +300,7 @@ class Pragmatic(Stripes):
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 16 * 1024*8 * i_sram_bank, 
+                            'size': 8 * 1024*8 * i_sram_bank, 
                             'bank_count': i_sram_bank, 
                             'rw_bw': (self.pe_array_dim['w'] * i_prec) * i_sram_bank,
                             'r_port': 1, 
