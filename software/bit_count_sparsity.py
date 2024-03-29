@@ -38,7 +38,7 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 16
+GROUP_SIZE = 4
 w_bitwidth = 8
 
 def main():
@@ -48,7 +48,8 @@ def main():
     sparse_value_count = 0
     sparse_bit_count_sm = 0
     sparse_bit_count_2s = 0
-    sparse_bit_count_skip_01 = 0
+    sparse_bit_count_skip_01_sm = 0
+    sparse_bit_count_skip_01_2s = 0
     sparse_bit_count_skip_01_msb = 0
 
     total_bit_count_model = 0
@@ -59,7 +60,7 @@ def main():
         print(weight_test.shape)
         print(f'Layer {name_list[i]}')
         file.writelines(f'Layer {name_list[i]} \n')
-        for func in [0, 1, 2, 3, 4]:
+        for func in [0, 1, 2, 3, 4, 5]:
             if func == 0:
                 layer_sparse_value = 0
                 layer_total_value  = 0
@@ -90,22 +91,31 @@ def main():
                     sparse_bit_count_sm += layer_sparse_bit
                     total_bit_count_model += layer_total_bit
                 elif func == 2:
+                    format = 'Skip 1 or 0 bit, SM'
+                    if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
+                        layer_sparse_bit, _ = count_less_bit_sm_conv(weight_test, w_bitwidth=w_bitwidth, 
+                                                                group_size=GROUP_SIZE, device=device)
+                    elif len(weight_test.shape) == 2:
+                        layer_sparse_bit, _ = count_less_bit_sm_fc(weight_test, w_bitwidth=w_bitwidth, 
+                                                                group_size=GROUP_SIZE, device=device)
+                    sparse_bit_count_skip_01_sm += layer_sparse_bit
+                elif func == 3:
                     format = 'Skip 0 bit, 2s Comp'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
                         layer_sparse_bit, _ = count_zero_bit_2s_conv(weight_test, w_bitwidth=w_bitwidth, device=device)
                     elif len(weight_test.shape) == 2:
                         layer_sparse_bit, _ = count_zero_bit_2s_fc(weight_test, w_bitwidth=w_bitwidth, device=device)
                     sparse_bit_count_2s += layer_sparse_bit
-                elif func == 3:
-                    format = 'Proposed skip 1 or 0 bit'
+                elif func == 4:
+                    format = 'Skip 1 or 0 bit, 2s'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
-                        layer_sparse_bit, _ = count_less_bit_conv(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit, _ = count_less_bit_2s_conv(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
                     elif len(weight_test.shape) == 2:
-                        layer_sparse_bit, _ = count_less_bit_fc(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit, _ = count_less_bit_2s_fc(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
-                    sparse_bit_count_skip_01 += layer_sparse_bit
-                elif func == 4:
+                    sparse_bit_count_skip_01_2s += layer_sparse_bit
+                elif func == 5:
                     format = 'Proposed msb clipping'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
                         layer_sparse_bit, _ = count_less_bit_clip_msb_conv(weight_test, w_bitwidth=w_bitwidth, 
@@ -130,6 +140,7 @@ def main():
     format = 'Skip Zero Value'
     line = f'{format.ljust(25)} Total sparse value count: {sparse_value_count}'
     print(line)
+    file.writelines(f'{line} \n\n')
     line = f'Model total value count: {total_value_count_model}\n'
     print(line)
     file.writelines(f'{line} \n\n')
@@ -137,21 +148,32 @@ def main():
     format = 'Skip 0 bit, Sign Mag'
     line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_sm}'
     print(line)
+    file.writelines(f'{line} \n')
+
+    format = 'Skip 1 or 0 bit, SM'
+    line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_01_sm}'
+    print(line)
+    file.writelines(f'{line} \n')
+
     format = 'Skip 0 bit, 2s Comp'
     line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_2s}'
     print(line)
     file.writelines(f'{line} \n')
-    format = 'Proposed skip 1 or 0 bit'
-    line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_01}'
+
+    format = 'Skip 1 or 0 bit, 2s'
+    line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_01_2s}'
     print(line)
     file.writelines(f'{line} \n')
+
     format = 'Proposed msb clipping'
     line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_01_msb}'
     print(line)
     file.writelines(f'{line} \n')
+    
     line = f'Model total bit count: {total_bit_count_model}'
     print(line)
     file.writelines(f'{line} \n')
+
     file.writelines('\n')
     file.close()
 

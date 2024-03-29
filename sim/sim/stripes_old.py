@@ -374,7 +374,7 @@ class Stripes(Accelerator):
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 8 * 1024*8 * i_sram_bank, 
+                            'size': 16 * 1024*8 * i_sram_bank, 
                             'bank_count': i_sram_bank, 
                             'rw_bw': (self.pe_array_dim['w'] * i_prec) * i_sram_bank,
                             'r_port': 1, 

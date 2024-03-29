@@ -35,6 +35,42 @@ def count_zero_bit_sm_fc(wq_int, w_bitwidth=8, device='cpu'):
     return int(sparse_bit_count), int(total_bit_count)
 
 
+def count_less_bit_sm_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
+    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
+    if C < group_size:
+        group_size = C
+    NUM_GROUP = K*W*H*C//group_size
+    wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
+    wq_int = wq_int.view(NUM_GROUP, group_size)
+
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    bit_one_count = torch.sum(wqb_signMagnitude, dim=-1)
+    skip_zero = bit_one_count.lt(group_size/2)
+    bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
+    sparse_bit_count = torch.sum(bit_one_count)
+    total_bit_count = K * C * W * H * w_bitwidth
+
+    return int(sparse_bit_count), int(total_bit_count)
+
+
+def count_less_bit_sm_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
+    K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
+    if C < group_size:
+        group_size = C
+    NUM_GROUP = K*C//group_size
+    wq_int = wq_int.unsqueeze(-1)
+    wq_int = wq_int.view(NUM_GROUP, group_size)
+
+    wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
+    bit_one_count = torch.sum(wqb_signMagnitude, dim=-1)
+    skip_zero = bit_one_count.lt(group_size/2)
+    bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
+    sparse_bit_count = torch.sum(bit_one_count)
+    total_bit_count = K * C * w_bitwidth
+
+    return int(sparse_bit_count), int(total_bit_count)
+
+
 def count_zero_bit_2s_conv(wq_int, w_bitwidth=8, device='cpu'):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
@@ -53,7 +89,7 @@ def count_zero_bit_2s_fc(wq_int, w_bitwidth=8, device='cpu'):
     return int(sparse_bit_count), int(total_bit_count)
 
 
-def count_less_bit_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
+def count_less_bit_2s_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
     K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
@@ -71,7 +107,7 @@ def count_less_bit_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
     return int(sparse_bit_count), int(total_bit_count)
 
 
-def count_less_bit_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
+def count_less_bit_2s_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
     K, C = wq_int.shape # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C

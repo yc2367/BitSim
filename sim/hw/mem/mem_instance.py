@@ -94,7 +94,7 @@ class MemoryInstance:
 
 
 if __name__ == "__main__":
-    func = 'dram'
+    func = 'sram'
     if func == 'dram':
         mem_config = {'technology': 0.028,
                     'mem_type': 'dram', 
@@ -109,14 +109,14 @@ if __name__ == "__main__":
     else:
         mem_config = {'technology': 0.028,
                   'mem_type': 'sram', 
-                  'size': 9*16 * 1024*8, 
+                  'size': 131072 * 16 * 8, 
                   'bank_count': 16, 
-                  'rw_bw': 256*16, 
+                  'rw_bw': 128*16, 
                   'r_port': 1, 
                   'w_port': 1, 
                   'rw_port': 0,
                   }
-        mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, 128, True, False)
+        mem = MemoryInstance('test_mem', mem_config, 0, 0, 1, 0, None, None, True, False)
     print(f'read cost: {mem.r_cost} pJ, write cost: {mem.w_cost} pJ, ' + 
           f'read min cost: {mem.r_cost_min} pJ, write min cost: {mem.w_cost_min} pJ, ' + 
           f'area: {mem.area}, latency: {mem.latency}')

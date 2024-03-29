@@ -1,23 +1,22 @@
 import math
 import torch
 import torch.nn as nn
-import numpy as np
 
 from typing import List
-from hw.mem.mem_instance import MemoryInstance
-from hw.alu.alu_unit import BitSerialPE
 from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
 
-from sim.util.bin_int_convert import int_to_signMagnitude, int_to_twosComplement
+from sim.util.bin_int_convert import int_to_twosComplement
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
-
-    PE_ENERGY = 0.46625 # energy per PE
-    W_REG_ENERGY_PER_ROW = 1.01125 # energy (pJ) of the weight shift register file for a PE row
-    DISPATCHER_ENERGY_PER_PE = 0.072625
-    I_REG_ENERGY_PER_COL = 0.53125 + DISPATCHER_ENERGY_PER_PE # energy (pJ) of the activation register file for a PE column
+    DISPATCHER_ENERGY_PER_COL = 0.072625
+    PE_ENERGY = 0.46625 # energy per 8-way DP PE
+    #PE_ENERGY = 0.30625
+    W_REG_ENERGY_PER_ROW = 0.763 # energy (pJ) of the weight scheduler for a PE row
+    #W_REG_ENERGY_PER_ROW = 0.38125
+    I_REG_ENERGY_PER_COL = 0.53 + DISPATCHER_ENERGY_PER_COL # energy (pJ) of the activation register file for a PE column
+    #I_REG_ENERGY_PER_COL = 0.2625 + DISPATCHER_ENERGY_PER_COL 
     PE_AREA = 1
 
     def __init__(self, 
@@ -28,7 +27,8 @@ class Pragmatic(Stripes):
                  model_name: str,
                  model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
         self.model_q = MODEL[model_name].cpu() # quantized model
-        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, pe_array_dim, model_name, model)
+        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
+                         pe_array_dim, model_name, model)
     
     def calc_cycle(self):
         total_cycle = 0
@@ -63,38 +63,6 @@ class Pragmatic(Stripes):
             else:
                 self._layer_cycle_compute[name] = 0
             '''
-    
-    def _calc_dram_cycle(self):
-        self._layer_cycle_dram = {}
-        i_prec = self.pe.input_precision_p
-        w_prec_pad = self.pe.input_precision_p
-        dram_bandwidth  = self.dram.rw_bw * 2 # DDR
-        size_sram_i = self.i_sram.size / 8
-        self._read_layer_input = True
-        for name in self.layer_name_list:
-            cycle_layer_dram = 0
-            w_dim = self.weight_dim[name]
-            if w_dim is not None:
-                cycle_dram_load_w = self._w_mem_required[name] * w_prec_pad / dram_bandwidth
-                i_mem_required = self._i_mem_required[name]
-                if self._read_layer_input:
-                    cycle_dram_load_i = i_mem_required * i_prec / dram_bandwidth 
-                else:
-                    cycle_dram_load_i = 0
-
-                o_mem_required = self._o_mem_required[name]
-                if ( i_mem_required + o_mem_required ) < size_sram_i:
-                    cycle_dram_write_o = 0
-                    self._read_layer_input = False
-                else:
-                    cycle_dram_write_o = o_mem_required * i_prec / dram_bandwidth
-                    self._read_layer_input = True
-                cycle_layer_dram = int(cycle_dram_load_w + cycle_dram_write_o + cycle_dram_load_i)
-            '''
-            else:
-                cycle_layer_dram = self._calc_residual_dram_latency(o_dim)
-            '''
-            self._layer_cycle_dram[name] = int(cycle_layer_dram)
 
     def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
@@ -124,6 +92,7 @@ class Pragmatic(Stripes):
             else:
                 tile_cout = wq_b[:, l_ti_cout:,          :, :, :]
             
+            '''
             if ( k**2 > cw ):
                 iter_cw = cw
                 for ti_cw in range(iter_cw):
@@ -140,21 +109,21 @@ class Pragmatic(Stripes):
                             tile_k = tile_cw[:, :, l_ti_k:]
                         cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
                         cycle_kernel += int(cycle_tile_k.item())
-            else:
-                for tk1 in range(k):
-                    for tk2 in range(k):
-                        # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
-                        tile_k = tile_cout[:, :, tk1, tk2, :]
-                        iter_cw = math.ceil(cw / pe_group_size)
-                        for ti_cw in range(iter_cw):
-                            l_ti_cw = ti_cw * pe_group_size
-                            u_ti_cw = (ti_cw+1) * pe_group_size
-                            if ( u_ti_cw <= cw ):
-                                tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            else:
-                                tile_cw = tile_k[:, :, l_ti_cw:]
-                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
-                            cycle_kernel += int(cycle_tile_cw.item())
+            '''
+            for tk1 in range(k):
+                for tk2 in range(k):
+                    # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
+                    tile_k = tile_cout[:, :, tk1, tk2, :]
+                    iter_cw = math.ceil(cw / pe_group_size)
+                    for ti_cw in range(iter_cw):
+                        l_ti_cw = ti_cw * pe_group_size
+                        u_ti_cw = (ti_cw+1) * pe_group_size
+                        if ( u_ti_cw <= cw ):
+                            tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+                        else:
+                            tile_cw = tile_k[:, :, l_ti_cw:]
+                        cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
+                        cycle_kernel += int(cycle_tile_cw.item())
         cycle_ow    = math.ceil(ow / num_pe_col)
         cycle_oh    = oh
 
@@ -257,72 +226,16 @@ class Pragmatic(Stripes):
             if ( layer_name == name ):
                 w = layer.weight()
                 wq = torch.int_repr(w)
-                wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
-                if len(wqb_signMagnitude.shape) == 5:
-                    wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
-                return wqb_signMagnitude
+                wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(wqb_twosComplement.shape) == 5:
+                    wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
+                return wqb_twosComplement
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
         
     def calc_compute_energy(self):
         num_pe = self.pe_array.total_unit_count
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
         num_cycle_compute = self.cycle_compute
-        num_tile = self.calc_pe_array_tile()
-
-        pe_energy = self.PE_ENERGY * num_pe * num_cycle_compute
-        w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle_compute
-        # The activation register is accessed every tile
-        i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_tile
-        compute_energy = pe_energy + w_reg_energy + i_reg_energy
+        compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy
     
-    def _init_mem(self):
-        w_prec = self.pe.input_precision_p
-        w_sram_bank = 16 # one bank feeds 2 PE rows
-        w_sram_config = {
-                            'technology': 0.028,
-                            'mem_type': 'sram', 
-                            'size': 9 * w_sram_bank * 1024*8, 
-                            'bank_count': w_sram_bank, 
-                            'rw_bw': (self.pe_array_dim['h'] * w_prec) * w_sram_bank, 
-                            'r_port': 1, 
-                            'w_port': 1, 
-                            'rw_port': 0,
-                        }
-        self.w_sram = MemoryInstance('w_sram', w_sram_config, 
-                                     r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=None, min_w_granularity=64, 
-                                     get_cost_from_cacti=True, double_buffering_support=False)
-        
-        i_prec = self.pe.input_precision_p
-        i_sram_bank = 16 # one bank feeds 1 PE columns
-        i_sram_config = {
-                            'technology': 0.028,
-                            'mem_type': 'sram', 
-                            'size': 8 * 1024*8 * i_sram_bank, 
-                            'bank_count': i_sram_bank, 
-                            'rw_bw': (self.pe_array_dim['w'] * i_prec) * i_sram_bank,
-                            'r_port': 1, 
-                            'w_port': 1, 
-                            'rw_port': 0,
-                        }
-        self.i_sram = MemoryInstance('i_sram', i_sram_config, 
-                                     r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=64, min_w_granularity=64, 
-                                     get_cost_from_cacti=True, double_buffering_support=False)
-        
-        dram_config = {
-                        'technology': 0.028,
-                        'mem_type': 'dram', 
-                        'size': 1e9 * 8, 
-                        'bank_count': 1, 
-                        'rw_bw': 64,
-                        'r_port': 0, 
-                        'w_port': 0, 
-                        'rw_port': 1,
-                    }
-        self.dram = MemoryInstance('dram', dram_config, 
-                                    r_cost=545, w_cost=560, latency=1, area=0, 
-                                    min_r_granularity=64, min_w_granularity=64, 
-                                    get_cost_from_cacti=False, double_buffering_support=False)
+    

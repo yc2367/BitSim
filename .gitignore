@@ -12,3 +12,6 @@ hardware/run.tcl
 save/*
 *.pth.tar
 *.log
+
+sim/hw/mem/self_gen/*
+sim/hw/mem/example_cacti_pool.yaml

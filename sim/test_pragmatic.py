@@ -7,7 +7,7 @@ model = MODEL[name]
 model = model()
 
 if __name__ == "__main__":
-    acc = Pragmatic(8, 8, 16, [32, 16], name, model)
+    acc = Pragmatic(8, 8, 16, [16, 16], name, model)
     print(f'total cycle: {acc.calc_cycle()}')
     
     compute_energy = acc.calc_compute_energy() / 1e6
