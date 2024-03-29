@@ -71,11 +71,13 @@ class DIM(Profiler):
             elif isinstance(m, nn.Linear):
                 self.linear_dim(m, n)
                 self.layer_name_list.append(n)
+            '''
             elif isinstance(m, resnet.Bottleneck):
                 self.bottleneck_dim(m, n)
                 self.layer_name_list.append(n)
             else:
                 print(f"{type(m)} will be ignored for dim calculation")
+            '''
 
 
     
