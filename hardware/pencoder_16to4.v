@@ -5,13 +5,12 @@ module pencoder_16to4
 (
     input  logic [15:0] bitmask,     
     output logic [3:0]  out,
-    output logic        is_zero
+    output logic        val
 );
-    assign is_zero = (bitmask == 16'd0) ? 1'b1 : 1'b0;
+    assign val = (bitmask == 16'd0) ? 1'b0 : 1'b1;
 
     always_comb begin
         casez (bitmask)
-            16'b0000000000000000:  out = 4'b0000;
             16'b0000000000000001:  out = 4'b1111;
             16'b000000000000001?:  out = 4'b1110;
             16'b00000000000001??:  out = 4'b1101;

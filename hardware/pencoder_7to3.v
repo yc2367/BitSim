@@ -11,7 +11,6 @@ module pencoder_7to3
 
     always_comb begin
         casez (bitmask)
-            7'b0000000:  out = 3'b000;
             7'b1000000:  out = 3'b110;
             7'b?100000:  out = 3'b101;
             7'b??10000:  out = 3'b100;

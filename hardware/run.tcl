@@ -3,15 +3,15 @@ set workdir /home/yc2367/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/tcbn28hpcplusbwp30p140ssg0p9vm40c.db"
 set_app_var link_library   "* $target_library"
 
-set run_module 1 ;
-set bit_func 0 ;
-set group_size 16 ;
+set run_module 0 ;
+set bit_func   2 ;
+set group_size 32 ;
 
-set add_load 1 ;
+set add_load 0 ;
 
 if {$run_module == 1} {
-    analyze -format sverilog $workdir/reg_file.v
-    elaborate reg_file
+    analyze -format sverilog $workdir/scheduler_bitlet_32.v
+    elaborate scheduler_bitlet_32
     if {$add_load == 1} {
         set_load 0.02 [all_outputs]
     }
@@ -34,13 +34,21 @@ if {$run_module == 1} {
         }
     } elseif {$bit_func == 2} {
         if {$group_size == 16} {
+            analyze -format sverilog $workdir/mac_unit_Bitlet_16.v
+            elaborate mac_unit_Bitlet_16_clk
+        } else {
+            analyze -format sverilog $workdir/mac_unit_Bitlet_32.v
+            elaborate mac_unit_Bitlet_32_clk
+        }
+    } elseif {$bit_func == 3} {
+        if {$group_size == 16} {
             analyze -format sverilog $workdir/mac_unit_Pragmatic_16.v
             elaborate mac_unit_Pragmatic_16_clk
         } else {
             analyze -format sverilog $workdir/mac_unit_Pragmatic_8.v
             elaborate mac_unit_Pragmatic_8_clk
         }
-    } elseif {$bit_func == 3} {
+    } elseif {$bit_func == 4} {
         if {$group_size == 16} {
             analyze -format sverilog $workdir/mac_unit_Stripes_16.v
             elaborate mac_unit_Stripes_16_clk
@@ -48,7 +56,7 @@ if {$run_module == 1} {
             analyze -format sverilog $workdir/mac_unit_Stripes_8.v
             elaborate mac_unit_Stripes_8_clk
         }
-    } elseif {$bit_func == 4} {
+    } elseif {$bit_func == 5} {
         if {$group_size == 16} {
             analyze -format sverilog $workdir/mac_unit_Parallel_128.v
             elaborate mac_unit_Parallel_128_clk
@@ -56,7 +64,7 @@ if {$run_module == 1} {
             analyze -format sverilog $workdir/mac_unit_Parallel_64.v
             elaborate mac_unit_Parallel_64_clk
         }
-    } elseif {$bit_func == 5} {
+    } elseif {$bit_func == 6} {
         if {$group_size == 16} {
             analyze -format sverilog $workdir/mac_unit_Precompute_16.v
             elaborate mac_unit_Precompute_16_clk

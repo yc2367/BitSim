@@ -11,7 +11,6 @@ module pencoder_5to3
 
     always_comb begin
         casez (bitmask)
-            5'b00000:  out = 3'b000;
             5'b00001:  out = 3'b100;
             5'b0001?:  out = 3'b011;
             5'b001??:  out = 3'b010;

@@ -5,7 +5,7 @@
 module shift_reg_file
 #(
     parameter DATA_WIDTH = 8,
-    parameter VEC_LENGTH = 16
+    parameter VEC_LENGTH = 8
 ) (
     input  logic                   clk,
     input  logic                   reset,
