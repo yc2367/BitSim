@@ -12,7 +12,7 @@ def kl_loss(weight_original, weight_new):
 
 def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
     wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -68,7 +68,7 @@ def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, nu
             wqb_signMagnitude[test_idx:, mask_group] = column_new[:, mask_group]
     
     wq_int_new = signMagnitude_to_int(wqb_signMagnitude, w_bitwidth=w_bitwidth, device=device)
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+    wq_int_new = wq_int_new.view(K, H, W, C).permute(0, 3, 1, 2)
 
     return wq_int_new
 
@@ -137,7 +137,7 @@ def bitflip_signMagnitude_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_
 
 def colAvg_twosComplement_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
     wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -168,7 +168,7 @@ def colAvg_twosComplement_conv(wq_int, w_bitwidth: int=8, group_size: int=16, nu
         wqb_twosComplement[prune_idx:, mask_value] = column_new[:, mask_value]
 
     wq_int_new = twosComplement_to_int(wqb_twosComplement, w_bitwidth=w_bitwidth, device=device)
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+    wq_int_new = wq_int_new.view(K, H, W, C).permute(0, 3, 1, 2)
 
     return wq_int_new
 
@@ -213,7 +213,7 @@ def colAvg_twosComplement_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_
 def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16, 
                            num_pruned_column: int=4, const_bitwidth: int=5, device='cpu'):
     wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -288,7 +288,7 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         error[mask_value] = new_error[mask_value]
         wq_int_new[mask_value] = wq_int_pruned[i][mask_value]
 
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+    wq_int_new = wq_int_new.view(K, H, W, C).permute(0, 3, 1, 2)
 
     return wq_int_new
 
@@ -377,7 +377,7 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
 
 def bitVert_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column: int=4, device='cpu'):
     wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -410,7 +410,7 @@ def bitVert_conv(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_colum
         error[mask_value] = new_error[mask_value]
         wq_int_new[mask_value] = result[mask_value]
     
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+    wq_int_new = wq_int_new.view(K, H, W, C).permute(0, 3, 1, 2)
     return wq_int_new
 
 
@@ -452,7 +452,7 @@ def bitVert_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_pruned_column:
 def colAvg_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16, 
                           num_pruned_column: int=4, const_bitwidth: int=5, device='cpu'):
     wq_int = wq_int.to(device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -509,7 +509,7 @@ def colAvg_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         error[mask_value] = new_error[mask_value]
         wq_int_new[mask_value] = wq_int_pruned[i][mask_value]
 
-    wq_int_new = wq_int_new.view(K, W, H, C).permute(0, 3, 1, 2)
+    wq_int_new = wq_int_new.view(K, H, W, C).permute(0, 3, 1, 2)
 
     return wq_int_new
 

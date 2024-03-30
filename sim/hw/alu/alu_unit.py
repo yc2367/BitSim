@@ -137,7 +137,7 @@ class Register(OperationalUnit):
         super().__init__(input_precision, output_precision, energy_cost, area, include_energy, include_area)
 
 
-## Bit Serial PE
+## PE
 class PE(OperationalUnit):
     ## The class constructor
     # @param input_precision: The bit precision of the bit-serial PE.

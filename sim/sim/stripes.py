@@ -30,7 +30,7 @@ class Stripes(Accelerator):
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
         
         self.pe_array_dim = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
-        self.pe_dotprod_size   = pe_dotprod_size
+        self.pe_dotprod_size = pe_dotprod_size
 
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
@@ -41,7 +41,6 @@ class Stripes(Accelerator):
         self._calc_compute_cycle()
         self._calc_dram_cycle()
         self.cycle_compute, self.cycle_total = self.calc_cycle()
-        print(self.input_dim)
     
     def calc_cycle(self):
         total_cycle = 0
@@ -544,6 +543,6 @@ class Stripes(Accelerator):
                         'rw_port': 1,
                     }
         self.dram = MemoryInstance('dram', dram_config, 
-                                    r_cost=750, w_cost=750, latency=1, area=0, 
+                                    r_cost=1000, w_cost=1000, latency=1, area=0, 
                                     min_r_granularity=64, min_w_granularity=64, 
                                     get_cost_from_cacti=False, double_buffering_support=False)

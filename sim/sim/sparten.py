@@ -5,13 +5,13 @@ import numpy as np
 
 from typing import List
 
+from hw.accelerator import Accelerator
+from hw.alu.alu_unit import PE
 from hw.mem.mem_instance import MemoryInstance
-from sim.stripes import Stripes
-from sim.util.model_quantized import MODEL
-from sim.util.bin_int_convert import int_to_twosComplement
+from model_profile.meters.count_zero_ops import CountZeroOps
 
 # Pragmatic accelerator
-class Bitlet(Stripes):
+class Sparten(Accelerator):
     DISPATCHER_ENERGY_PER_COL = 0.072625
     #PE_ENERGY = 0.32 # energy per PE
     PE_ENERGY = 0.355 # energy per PE
@@ -21,15 +21,28 @@ class Bitlet(Stripes):
     PE_AREA = 1
 
     def __init__(self, 
-                 input_precision_s: int, # bit-serial operand precision
-                 input_precision_p: int, # bit-parallel operand precision
+                 input_precision: int, # operand precision
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
-        self.model_q = MODEL[model_name].cpu() # quantized model
-        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)
+                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
+                 args):
+        assert len(pe_array_dim) == 2, \
+            f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
+        self.input_precision = input_precision
+        self.pe_array_dim = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
+        self.pe_dotprod_size = pe_dotprod_size
+
+        pe = PE([input_precision, input_precision], 
+                pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
+        super().__init__(pe, self.pe_array_dim, model_name, model)
+        self._init_mem()
+        self.num_zero_ops = self._calc_zero_ops(model_name, model, args)
+    
+    def _calc_zero_ops(self, model_name, model, args):
+        zero_ops_profiler = CountZeroOps(model_name, model, args=args, device=self.DEVICE)
+        zero_ops_profiler.fit()
+        return zero_ops_profiler.num_zero_ops
     
     def calc_cycle(self):
         total_cycle = 0
@@ -37,7 +50,6 @@ class Bitlet(Stripes):
         for name in self.layer_name_list:
             cycle_layer_compute = self._layer_cycle_compute[name]
             cycle_layer_dram    = self._layer_cycle_dram[name]
-            print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
         return total_cycle_compute, total_cycle
@@ -218,7 +230,7 @@ class Bitlet(Stripes):
         return compute_energy
     
     def _init_mem(self):
-        w_prec = self.pe.input_precision_p
+        w_prec = self.input_precision
         w_sram_bank = 32 # one bank feeds 2 PE rows
         w_sram_config = {
                             'technology': 0.028,
@@ -236,7 +248,7 @@ class Bitlet(Stripes):
                                      min_w_granularity=self.pe_array_dim['h'] * w_prec,  
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
-        i_prec = self.pe.input_precision_p
+        i_prec = self.input_precision
         i_sram_bank = 32 # one bank feeds 1 PE columns
         i_sram_config = {
                             'technology': 0.028,

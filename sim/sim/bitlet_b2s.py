@@ -8,7 +8,7 @@ from typing import List
 from hw.mem.mem_instance import MemoryInstance
 from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
-from sim.util.bin_int_convert import int_to_twosComplement
+from sim.util.bin_int_convert import less_bit_twosComplement_conv, less_bit_twosComplement_fc
 
 # Pragmatic accelerator
 class Bitlet(Stripes):
@@ -104,7 +104,7 @@ class Bitlet(Stripes):
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
                         else:
                             tile_cw = tile_k[:, :, l_ti_cw:]
-                        cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=-1))
+                        cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=-1))  + 1
                         cycle_kernel += int(cycle_tile_cw.item())
         cycle_ow    = math.ceil(ow / num_pe_col)
         cycle_oh    = oh
@@ -150,7 +150,7 @@ class Bitlet(Stripes):
                         tile_k = tile_cw[:, l_ti_k:u_ti_k]
                     else:
                         tile_k = tile_cw[:, l_ti_k:]
-                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=-1))
+                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=-1))  + 1
                     cycle_kernel += int(cycle_tile_k.item())
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
@@ -194,18 +194,22 @@ class Bitlet(Stripes):
                     tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
                 else:
                     tile_cin = tile_cout[:, :, l_ti_cin:]
-                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))
+                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))  + 1
                 cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size / num_pe_col)
+        cycle_batch = math.ceil(batch_size / num_pe_col) 
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
     
     def _get_quantized_weight(self, layer_name):
+        group_size = self.pe_dotprod_size
         for name, layer in self.model_q.named_modules():
             if ( layer_name == name ):
                 w = layer.weight()
                 wq = torch.int_repr(w)
-                wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(w.shape) == 4:
+                    wqb_twosComplement = less_bit_twosComplement_conv(wq, 8, group_size, self.DEVICE)
+                else:
+                    wqb_twosComplement = less_bit_twosComplement_fc(wq, 8, group_size, self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
                 return wqb_twosComplement
@@ -265,7 +269,7 @@ class Bitlet(Stripes):
                         'rw_port': 1,
                     }
         self.dram = MemoryInstance('dram', dram_config, 
-                                    r_cost=1000, w_cost=1000, latency=1, area=0, 
+                                    r_cost=750, w_cost=750, latency=1, area=0, 
                                     min_r_granularity=64, min_w_granularity=64, 
                                     get_cost_from_cacti=False, double_buffering_support=False)
      

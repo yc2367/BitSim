@@ -33,12 +33,13 @@ weight_list = []
 name_list   = []
 for n, m in model.named_modules():
     if hasattr(m, "weight"):
+        print(m)
         w = m.weight()
         wint = torch.int_repr(w)
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 4
+GROUP_SIZE = 16
 w_bitwidth = 8
 
 def main():
@@ -54,37 +55,56 @@ def main():
 
     total_bit_count_model = 0
     total_value_count_model = 0
+    total_value_count_until_now  = 0
+
+    for i in range(len(weight_list)):
+        weight_test = weight_list[i]
+        layer_total_value  = 0
+        if len(weight_test.shape) == 4:
+            _, layer_total_value = count_zero_value_conv(weight_test)
+        elif len(weight_test.shape) == 2:
+            _, layer_total_value = count_zero_value_fc(weight_test)
+        total_value_count_model += layer_total_value
 
     for i in range(len(weight_list)):
         weight_test = weight_list[i]
         print(weight_test.shape)
         print(f'Layer {name_list[i]}')
         file.writelines(f'Layer {name_list[i]} \n')
+        file.writelines(f'Shape {weight_test.shape} \n')
         for func in [0, 1, 2, 3, 4, 5]:
             if func == 0:
                 layer_sparse_value = 0
                 layer_total_value  = 0
                 format = 'Skip Zero Value'
-                if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
+                if len(weight_test.shape) == 4:
                     layer_sparse_value, layer_total_value = count_zero_value_conv(weight_test)
                 elif len(weight_test.shape) == 2:
                     layer_sparse_value, layer_total_value = count_zero_value_fc(weight_test)
                 sparse_value_count += layer_sparse_value
-                total_value_count_model += layer_total_value
+                total_value_count_until_now += layer_total_value
 
                 line = f'{format.ljust(25)} Sparse value count: {layer_sparse_value}'
                 print(line)
                 file.writelines(f'{line} \n')
+
                 line = f'Layer value count: {layer_total_value}'
+                print(line)
+                file.writelines(f'{line} \n')
+
+                line = f'Layer value percent: {layer_total_value / total_value_count_model * 100}%'
+                print(line)
+                file.writelines(f'{line} \n')
+
+                line = f'Value percent until now: {total_value_count_until_now / total_value_count_model * 100}%'
                 print(line, '\n')
                 file.writelines(f'{line} \n')
-                file.writelines('\n\n')
+                file.writelines('\n')
             else:
                 layer_sparse_bit = 0
-                layer_total_bit  = 0
                 if func == 1:
                     format = 'Skip 0 bit, Sign Mag'
-                    if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
+                    if len(weight_test.shape) == 4:
                         layer_sparse_bit, layer_total_bit = count_zero_bit_sm_conv(weight_test, w_bitwidth=w_bitwidth, device=device)
                     elif len(weight_test.shape) == 2:
                         layer_sparse_bit, layer_total_bit = count_zero_bit_sm_fc(weight_test, w_bitwidth=w_bitwidth, device=device)
@@ -95,7 +115,7 @@ def main():
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
                         layer_sparse_bit, _ = count_less_bit_sm_conv(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
-                    elif len(weight_test.shape) == 2:
+                    elif len(weight_test.shape) == 2 and weight_test.shape[1] != 1:
                         layer_sparse_bit, _ = count_less_bit_sm_fc(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
                     sparse_bit_count_skip_01_sm += layer_sparse_bit
@@ -140,7 +160,7 @@ def main():
     format = 'Skip Zero Value'
     line = f'{format.ljust(25)} Total sparse value count: {sparse_value_count}'
     print(line)
-    file.writelines(f'{line} \n\n')
+    file.writelines(f'{line} \n')
     line = f'Model total value count: {total_value_count_model}\n'
     print(line)
     file.writelines(f'{line} \n\n')

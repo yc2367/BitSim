@@ -23,9 +23,8 @@ class Accelerator:
          self.input_dim,  # format: {layer_name: [batch_size, width, height, in_channel], ...}
          self.output_dim, # format: {layer_name: [batch_size, width, height, out_channel], ...}
          self.layer_name_list) = self._init_model_profiler(model_name, model)
-        
         # number of memory access
-        self.num_mem_access = {'rd_w_sram': 0, 'wr_w_sram': 0, 'rd_i_sram': 0, 'wr_i_sram': 0, 'rd_dram': 0, 'wr_dram': 0}
+        #self.num_mem_access = {'rd_w_sram': 0, 'wr_w_sram': 0, 'rd_i_sram': 0, 'wr_i_sram': 0, 'rd_dram': 0, 'wr_dram': 0}
     
     def _init_model_profiler(self, model_name, model):
         dim_profiler = DIM(model_name, model, device=self.DEVICE, input_size=224)
@@ -55,24 +54,6 @@ class BitSerialAccelerator(Accelerator):
                  model_name: str,
                  model: nn.Module):
         super().__init__(pe, pe_array_dim, model_name, model)
-    
-    def calc_pe_array_tile(self):
-        total_tile = 0
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            i_dim = self.input_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    cin = i_dim[3]
-                    cw  = w_dim[2]
-                    if cin == cw: 
-                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
-                    else: # depthwise conv
-                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
-                else:
-                    total_tile += self._calc_fc_tile(w_dim, o_dim)
-        return total_tile
     
     
     

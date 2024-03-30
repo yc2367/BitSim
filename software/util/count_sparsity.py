@@ -4,7 +4,7 @@ from util.bin_int_convert import *
 
 
 def count_zero_value_conv(wq_int):
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     param_count = K*C*W*H
     sparse_value_count = torch.sum(torch.eq(wq_int, 0))
     return int(sparse_value_count), int(param_count)
@@ -19,7 +19,7 @@ def count_zero_value_fc(wq_int):
 
 def count_zero_bit_sm_conv(wq_int, w_bitwidth=8, device='cpu'):
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     param_count = K*C*W*H
     total_bit_count = w_bitwidth*param_count
     sparse_bit_count = total_bit_count - torch.sum(wqb_signMagnitude)
@@ -36,7 +36,7 @@ def count_zero_bit_sm_fc(wq_int, w_bitwidth=8, device='cpu'):
 
 
 def count_less_bit_sm_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.shape # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -73,7 +73,7 @@ def count_less_bit_sm_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
 
 def count_zero_bit_2s_conv(wq_int, w_bitwidth=8, device='cpu'):
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     param_count = K*C*W*H
     total_bit_count = w_bitwidth*param_count
     sparse_bit_count = total_bit_count - torch.sum(wqb_twosComplement)
@@ -90,7 +90,7 @@ def count_zero_bit_2s_fc(wq_int, w_bitwidth=8, device='cpu'):
 
 
 def count_less_bit_2s_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    K, C, W, H = wq_int.shape # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.shape # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -126,7 +126,7 @@ def count_less_bit_2s_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
 
 
 def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
-    K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+    K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
@@ -188,7 +188,7 @@ class countZeroColumn:
         self.num_total_column = 0
     
     def count_zero_column_conv(self, wq_int, w_bitwidth, group_size, device='cpu'):
-        K, C, W, H = wq_int.size() # output channel, input channel, kernel width, kernel height
+        K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
         if C < group_size:
             group_size = C
         NUM_GROUP = K*W*H*C//group_size
