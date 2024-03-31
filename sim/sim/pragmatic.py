@@ -54,18 +54,18 @@ class Pragmatic(Stripes):
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        cycle_layer_compute = self._calc_conv2d_cycle(name, w_dim, o_dim)
+                        cycle_layer_compute = self._calc_cycle_conv2d(name, w_dim, o_dim)
                     else: # depthwise conv
-                        cycle_layer_compute = self._calc_dwconv_cycle(name, w_dim, i_dim, o_dim)
+                        cycle_layer_compute = self._calc_cycle_dwconv(name, w_dim, i_dim, o_dim)
                 else:
-                    cycle_layer_compute = self._calc_fc_cycle(name, w_dim, o_dim)
+                    cycle_layer_compute = self._calc_cycle_fc(name, w_dim, o_dim)
                 self._layer_cycle_compute[name] = cycle_layer_compute
             '''
             else:
                 self._layer_cycle_compute[name] = 0
             '''
 
-    def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
+    def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :, :, :]
@@ -88,10 +88,7 @@ class Pragmatic(Stripes):
             l_ti_cout = ti_cout * num_pe_row
             u_ti_cout = (ti_cout+1) * num_pe_row
             # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
-            if ( u_ti_cout <= cout ):
-                tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :, :, :]
-            else:
-                tile_cout = wq_b[:, l_ti_cout:,          :, :, :]
+            tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :, :, :]
             
             '''
             if ( k**2 > cw ):
@@ -119,10 +116,8 @@ class Pragmatic(Stripes):
                     for ti_cw in range(iter_cw):
                         l_ti_cw = ti_cw * pe_group_size
                         u_ti_cw = (ti_cw+1) * pe_group_size
-                        if ( u_ti_cw <= cw ):
-                            tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                        else:
-                            tile_cw = tile_k[:, :, l_ti_cw:]
+                        tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+
                         cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
                         cycle_kernel += int(cycle_tile_cw.item())
         cycle_ow    = math.ceil(ow / num_pe_col)
@@ -132,7 +127,7 @@ class Pragmatic(Stripes):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
     
-    def _calc_dwconv_cycle(self, layer_name, w_dim, i_dim, o_dim):
+    def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :, :, :]
@@ -166,10 +161,8 @@ class Pragmatic(Stripes):
                 for ti_k in range(iter_k):
                     l_ti_k = ti_k * pe_group_size
                     u_ti_k = (ti_k+1) * pe_group_size
-                    if ( u_ti_k <= k**2 ):
-                        tile_k = tile_cw[:, l_ti_k:u_ti_k]
-                    else:
-                        tile_k = tile_cw[:, l_ti_k:]
+                    tile_k = tile_cw[:, l_ti_k:u_ti_k]
+
                     cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
                     cycle_kernel += int(cycle_tile_k.item())
         cycle_ow = math.ceil(ow / num_pe_col)
@@ -179,7 +172,7 @@ class Pragmatic(Stripes):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
 
-    def _calc_fc_cycle(self, layer_name, w_dim, o_dim):
+    def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :]
@@ -202,19 +195,14 @@ class Pragmatic(Stripes):
             l_ti_cout = ti_cout * num_pe_row
             u_ti_cout = (ti_cout+1) * num_pe_row
             # get the tile along output channel: [bit_significance, tile_cout, cin]
-            if ( u_ti_cout <= cout ):
-                tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :]
-            else:
-                tile_cout = wq_b[:, l_ti_cout:,          :]
+            tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :]
             
             iter_cin = math.ceil(cin / pe_group_size)
             for ti_cin in range(iter_cin):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
-                if ( u_ti_cin <= cin ):
-                    tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-                else:
-                    tile_cin = tile_cout[:, :, l_ti_cin:]
+                tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
+                
                 cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0))
                 cycle_kernel += int(cycle_tile_cin.item())
         cycle_batch = math.ceil(batch_size / num_pe_col)

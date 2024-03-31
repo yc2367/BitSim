@@ -35,11 +35,7 @@ class Stripes(Accelerator):
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, self.pe_array_dim, model_name, model)
-        self._init_mem()
-        self._check_layer_mem_size()
-        self._calc_num_mem_refetch()
-        self._calc_compute_cycle()
-        self._calc_dram_cycle()
+        
         self.cycle_compute, self.cycle_total = self.calc_cycle()
     
     def calc_cycle(self):
@@ -68,11 +64,11 @@ class Stripes(Accelerator):
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        tile_layer = self._calc_conv2d_tile(w_dim, o_dim)
+                        tile_layer = self._calc_tile_conv2d(w_dim, o_dim)
                     else: # depthwise conv
-                        tile_layer = self._calc_dwconv_tile(w_dim, i_dim, o_dim)
+                        tile_layer = self._calc_tile_dwconv(w_dim, i_dim, o_dim)
                 else:
-                    tile_layer = self._calc_fc_tile(w_dim, o_dim)
+                    tile_layer = self._calc_tile_fc(w_dim, o_dim)
                 cycle_layer_compute = tile_layer * w_prec
                 self._layer_cycle_compute[name] = cycle_layer_compute
             '''
@@ -139,10 +135,10 @@ class Stripes(Accelerator):
                 i_mem_required = self._i_mem_required[name]
                 if ( w_mem_required > size_sram_w ) and ( i_mem_required > size_sram_i ):
                     # need DRAM refetch
-                    num_refetch_input = math.ceil(w_mem_required / size_sram_w)
+                    num_refetch_input  = math.ceil(w_mem_required / size_sram_w)
                     num_refetch_weight = math.ceil(i_mem_required / size_sram_i)
                     total_fetch_weight = num_refetch_weight * w_mem_required
-                    total_fetch_input = num_refetch_input * i_mem_required
+                    total_fetch_input  = num_refetch_input * i_mem_required
                     #print('Need DRAM refetch ...')
                     #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
                     if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
@@ -193,10 +189,10 @@ class Stripes(Accelerator):
             if w_dim is not None:
                 num_fetch_w, num_fetch_i = self._layer_mem_refetch[name]
                 if len(w_dim) == 4:
-                    total_energy += self._calc_conv_sram_wr_energy(w_dim, i_dim, o_dim,
+                    total_energy += self._calc_sram_wr_energy_conv(w_dim, i_dim, o_dim,
                                                              num_fetch_w, num_fetch_i)
                 else:
-                    total_energy += self._calc_fc_sram_wr_energy(layer_idx, w_dim, o_dim, 
+                    total_energy += self._calc_sram_wr_energy_fc(layer_idx, w_dim, o_dim, 
                                                            num_fetch_w, num_fetch_i)
         return total_energy
     
@@ -242,9 +238,9 @@ class Stripes(Accelerator):
             w_dim = self.weight_dim[name]
             if w_dim is not None:
                 if len(w_dim) == 4:
-                    energy += self._calc_conv_dram_energy(name)
+                    energy += self._calc_dram_energy_conv(name)
                 else:
-                    energy += self._calc_fc_dram_energy(name)
+                    energy += self._calc_dram_energy_fc(name)
             '''
             else:
                 energy += self._calc_residual_dram_energy(o_dim)
@@ -262,14 +258,14 @@ class Stripes(Accelerator):
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
+                        total_tile += self._calc_tile_conv2d(w_dim, o_dim)
                     else: # depthwise conv
-                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
+                        total_tile += self._calc_tile_dwconv(w_dim, i_dim, o_dim)
                 else:
-                    total_tile += self._calc_fc_tile(w_dim, o_dim)
+                    total_tile += self._calc_tile_fc(w_dim, o_dim)
         return total_tile
     
-    def _calc_conv2d_tile(self, w_dim, o_dim):
+    def _calc_tile_conv2d(self, w_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
@@ -298,7 +294,7 @@ class Stripes(Accelerator):
         total_tile = tile_per_batch * batch_size
         return total_tile
     
-    def _calc_dwconv_tile(self, w_dim, i_dim, o_dim):
+    def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_col = self.pe_array_dim['w']
 
@@ -324,7 +320,7 @@ class Stripes(Accelerator):
         total_tile = tile_per_batch * batch_size
         return total_tile
 
-    def _calc_fc_tile(self, w_dim, o_dim):
+    def _calc_tile_fc(self, w_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
@@ -357,7 +353,7 @@ class Stripes(Accelerator):
         total_energy = num_i_sram_rw * (i_sram_rd_cost + i_sram_wr_cost)
         return total_energy
     
-    def _calc_conv_sram_wr_energy(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
+    def _calc_sram_wr_energy_conv(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -385,7 +381,7 @@ class Stripes(Accelerator):
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
         return total_energy
     
-    def _calc_fc_sram_wr_energy(self, layer_idx, w_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
+    def _calc_sram_wr_energy_fc(self, layer_idx, w_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -408,7 +404,7 @@ class Stripes(Accelerator):
         total_energy = energy_w_sram_wr + energy_i_sram_wr
         return total_energy
 
-    def _calc_conv_dram_energy(self, layer_name):
+    def _calc_dram_energy_conv(self, layer_name):
         i_prec = self.pe.input_precision_p
         w_prec = self.pe.input_precision_p
         bus_width = self.dram.rw_bw
@@ -456,7 +452,7 @@ class Stripes(Accelerator):
         total_energy = energy_input
         return total_energy
     
-    def _calc_fc_dram_energy(self, layer_name):
+    def _calc_dram_energy_fc(self, layer_name):
         w_prec = self.pe.input_precision_s
         i_prec = self.pe.input_precision_p
         size_sram_i = self.i_sram.size / 8

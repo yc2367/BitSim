@@ -23,6 +23,11 @@ class Accelerator:
          self.input_dim,  # format: {layer_name: [batch_size, width, height, in_channel], ...}
          self.output_dim, # format: {layer_name: [batch_size, width, height, out_channel], ...}
          self.layer_name_list) = self._init_model_profiler(model_name, model)
+        self._init_mem()
+        self._check_layer_mem_size()
+        self._calc_num_mem_refetch()
+        self._calc_compute_cycle()
+        self._calc_dram_cycle()
         # number of memory access
         #self.num_mem_access = {'rd_w_sram': 0, 'wr_w_sram': 0, 'rd_i_sram': 0, 'wr_i_sram': 0, 'rd_dram': 0, 'wr_dram': 0}
     
@@ -37,23 +42,22 @@ class Accelerator:
     def _init_mem(self):
         raise NotImplementedError
     
-    def calc_cycle(self):
+    def _check_layer_mem_size(self):
+        raise NotImplementedError
+    
+    def _calc_num_mem_refetch(self):
+        raise NotImplementedError
+    
+    def _calc_compute_cycle(self):
+        raise NotImplementedError
+    
+    def _calc_dram_cycle(self):
         raise NotImplementedError
     
     def get_pe_array_dim(self):
         return self.pe_array.dimension
 
 
-class BitSerialAccelerator(Accelerator):
-    ### Global variable
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-    def __init__(self, 
-                 pe: PE,
-                 pe_array_dim: Dict[str, int],
-                 model_name: str,
-                 model: nn.Module):
-        super().__init__(pe, pe_array_dim, model_name, model)
     
     
     

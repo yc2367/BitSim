@@ -20,7 +20,9 @@ model = MODEL[name]
 model = model(weights='DEFAULT')
 
 if __name__ == "__main__":
-    acc = Sparten(8, 16, [32, 16], name, model, args)
+    acc = Sparten(8, 128, [32, 16], name, model, args)
+    dram_energy    = acc.calc_dram_energy() / 1e6
+    print(f'dram energy: {dram_energy} uJ')
     '''
     print(f'total cycle: {acc.calc_cycle()}')
 

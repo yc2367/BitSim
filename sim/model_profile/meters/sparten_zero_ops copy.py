@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torchvision import datasets
-import pickle, os, math
+import pickle, os
 
 from model_profile.meters.profiler import Profiler
 from sim.util.model_quantized import MODEL
@@ -34,24 +34,23 @@ def feature_hook(name, state_dict):
 
 
 class SpartenZeroOps(Profiler):
-    def __init__(self, name, model: nn.Module, group_size, args, device, precision=32) -> None:
+    def __init__(self, name, model: nn.Module, args, device, precision=32) -> None:
         (self.testloader, 
          self.num_classes, 
          self.input_size) = get_loader(args)
         super().__init__(name, model, device, self.input_size, precision) 
         self.model_q = MODEL[name].cpu() # quantized model
         self.save_dir = args.sparten_save_dir
-        self.group_size = group_size
          
         self.layer_name_list = []
-        self.num_zero_input  = {} 
+        self.num_zero_input = {} 
         self.num_zero_output = {} 
         self.num_zero_weight = {} 
         # number of zero operations for every layer
         self.num_zero_ops = {}
         # check if a conv2d is followed by a ReLU activation function, 
         # this is used to measure output sparsity
-        self.bn_list = {}
+        self.is_relu = {}
 
     def hook(self):
         for n, m in self.model.named_modules():
@@ -68,15 +67,23 @@ class SpartenZeroOps(Profiler):
             break
 
     def fit(self, create_new_dict=False):
-        current_conv_layer = None
+        current_layer_name = None
         for n, m in self.model.named_modules():
             if isinstance(m, nn.Conv2d):
                 self.layer_name_list.append(n)
-                current_conv_layer = n
-            elif isinstance(m, nn.BatchNorm2d):
-                self.bn_list[current_conv_layer] = m
+                current_layer_name = n
             elif isinstance(m, nn.Linear):
                 self.layer_name_list.append(n)
+            elif isinstance(m, nn.ReLU):
+                self.is_relu[current_layer_name] = True
+
+        layer_with_relu = self.is_relu.keys()
+        for n, _ in self.model.named_modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                if n in layer_with_relu:
+                    continue
+                else:
+                    self.is_relu[n] = False
 
         save_dir = self.save_dir
         model_name = self.model_name
@@ -92,10 +99,8 @@ class SpartenZeroOps(Profiler):
             self.forward()
             for n, m in self.model.named_modules():
                 if isinstance(m, nn.Conv2d):
-                    self.count_zero_value_conv(m ,n)
                     self.count_zero_ops_conv(m ,n)
                 if isinstance(m, nn.Linear):
-                    self.count_zero_value_linear(m ,n)
                     self.count_zero_ops_linear(m, n)
             with open(file_num_zero_input, 'wb') as f:
                 pickle.dump(self.num_zero_input, f)
@@ -114,85 +119,50 @@ class SpartenZeroOps(Profiler):
                 self.num_zero_weight = pickle.load(f)
             with open(file_num_zero_ops, 'rb') as f:
                 self.num_zero_ops = pickle.load(f)
-    
-    def count_zero_value_conv(self, layer: nn.Conv2d, name:str):
-        i_feature = self.feature_dict[name][0]
-        o_feature = self.feature_dict[name][1]
-        weight_quantized = self._get_quantized_weight(name)
-        bi, _,  _, _ = i_feature.shape
-
-        self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
-        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
-        if name in self.bn_list.keys():
-            batchnorm = self.bn_list[name]
-            o_feature = batchnorm(o_feature)
-        self.num_zero_output[name] = round(torch.sum(o_feature <= 0).item() / bi)
-    
-    def count_zero_value_linear(self, layer: nn.Conv2d, name:str):
-        i_feature = self.feature_dict[name][0]
-        o_feature = self.feature_dict[name][1]
-        weight_quantized = self._get_quantized_weight(name)
-
-        # size
-        bi, _  = i_feature.shape
-
-        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
-        self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
-        self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
-
+        
     def count_zero_ops_conv(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight = layer.weight
-        group_size = self.group_size
+        weight_quantized = self._get_quantized_weight(name)
         
         # size
         bi, _,  _, _ = i_feature.shape
         bo, cout, oh, ow = o_feature.shape
         assert bi == bo, 'ERROR! Batch size is not the same for input feature and output feature!'
         # kernel
-        k = layer.kernel_size[0]
         cin = layer.in_channels // layer.groups
 
-        # count number of zero operations for every group
-        num_groups = math.ceil(k**2 * cin / group_size) 
-        is_integer_num_group = ((k**2 * cin) % group_size) == 0
+        self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
+        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
+        if self.is_relu[name] == True:
+            self.num_zero_output[name] = round(torch.sum(o_feature <= 0).item() / bi)
+        else:
+            self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
+
+        # count number of zero operations for every output pixel
+        num_zero_ops = torch.zeros_like(o_feature)
+        num_zero_ops = num_zero_ops
         if cin == layer.in_channels: # conv2D
-            num_zero_ops = torch.zeros([bo, cout, oh, ow, num_groups])
             unfold = nn.Unfold(kernel_size=layer.kernel_size, padding=layer.padding, stride=layer.stride)
-            i_feature = unfold(i_feature).permute([0, 2, 1])
+            i_feature = unfold(i_feature)
             for j_cout in range(cout): # output channel dimension
-                kernel = weight[j_cout].flatten()
-                if is_integer_num_group:
-                    kernel = kernel.unsqueeze(-1).reshape([num_groups, group_size])
-                    kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1, -1)
-                    i_feature = i_feature.unsqueeze(-1).reshape([bi, oh*ow, num_groups, group_size])
-                    is_zero = ((i_feature * kernel) == 0)
-                    num_zero = torch.sum(is_zero, dim=-1)
-                    num_zero = num_zero.reshape((bi, oh, ow, num_groups))
-                    num_zero_ops[:, j_cout, :, :, :] = num_zero
-                else:
-                    kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1)
-                    for j_group in range(num_groups):
-                        # divide the dot-product into groups of group_size
-                        l_j_group = j_group * group_size
-                        u_j_group = (j_group+1) * group_size
-                        i_patch = i_feature[:, :, l_j_group:u_j_group]
-                        w_patch = kernel[:, :, l_j_group:u_j_group]
-                        is_zero = ((i_patch * w_patch) == 0)
-                        num_zero = torch.sum(is_zero, dim=-1)
-                        num_zero_ops[:, j_cout, :, :, j_group] = num_zero.unsqueeze(1).reshape((bi, oh, ow))
-            print(num_zero_ops.shape)
+                kernel = weight[j_cout].flatten().unsqueeze(-1).unsqueeze(0).expand(bi, -1, oh*ow)
+                is_zero = ((i_feature * kernel) == 0)
+                num_zero = torch.sum(is_zero, dim=1)
+                num_zero_ops[:, j_cout, :, :] = num_zero.unsqueeze(0).reshape((bi, oh, ow))
+            #print(num_zero_ops)
+            #exit(1)
         else: # depthwise
-            num_zero_ops = torch.zeros([bo, cout, oh, ow])
             unfold = nn.Unfold(kernel_size=layer.kernel_size, padding=layer.padding, stride=layer.stride)
             for j_cout in range(cout): # output channel dimension
                 image_channel = unfold(i_feature[:, j_cout].unsqueeze(1))
                 kernel = weight[j_cout].flatten().unsqueeze(-1).unsqueeze(0).expand(bi, -1, oh*ow)
                 is_zero = ((image_channel * kernel) == 0)
                 num_zero = torch.sum(is_zero, dim=1)
-                num_zero_ops[:, j_cout, :, :] = num_zero.unsqueeze(-1).reshape((bi, oh, ow))
-            num_zero_ops = num_zero_ops.unsqueeze(-1)
+                num_zero_ops[:, j_cout, :, :] = num_zero.unsqueeze(0).reshape((bi, oh, ow))
+            #print(num_zero_ops)
+            #exit(1)
         self.num_zero_ops[name] = torch.round(torch.mean(num_zero_ops, dim=0))
         #print(self.num_zero_ops[name])
         
@@ -201,7 +171,6 @@ class SpartenZeroOps(Profiler):
         o_feature = self.feature_dict[name][1]
         weight = layer.weight
         weight_quantized = self._get_quantized_weight(name)
-        group_size = self.group_size
 
         # size
         bi, cin  = i_feature.shape
@@ -212,29 +181,11 @@ class SpartenZeroOps(Profiler):
         self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
         self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
 
-        num_groups = math.ceil(cin / group_size) 
-        num_zero_ops = torch.zeros([bo, cout, num_groups])
-        is_integer_num_group = (cin % group_size) == 0
-
-        # count number of zero operations for every group
-        if is_integer_num_group:
-            kernel = weight.unsqueeze(-1).reshape([cout, num_groups, group_size])
-            kernel = kernel.unsqueeze(0).expand(bi, -1, -1, -1)
-            i_feature = i_feature.unsqueeze(-1).reshape([bi, num_groups, group_size])
-            i_feature = i_feature.unsqueeze(1).expand([-1, cout, -1, -1])
-            is_zero = ((i_feature * kernel) == 0)
-            num_zero_ops = torch.sum(is_zero, dim=-1).to(torch.float32)
-        else:
-            i_feature = i_feature.unsqueeze(1).expand(-1, cout, -1)
-            kernel  = weight.unsqueeze(0).expand(bi, -1, -1)
-            for j_group in range(num_groups):
-                # divide the dot-product into groups of group_size
-                l_j_group = j_group * num_groups
-                u_j_group = (j_group+1) * num_groups
-                i_patch = i_feature[:, :, l_j_group:u_j_group]
-                w_patch = kernel[:, :, l_j_group:u_j_group]
-                is_zero = ((i_patch * w_patch) == 0)
-                num_zero_ops[:, :, j_group] = torch.sum(is_zero, dim=-1).to(torch.float32)
+        # count number of zero operations for every output pixel        
+        i_patch = i_feature.unsqueeze(1).expand(-1, cout, -1)
+        kernel  = weight.unsqueeze(0).expand(bi, -1, -1)
+        is_zero = ((i_patch * kernel) == 0)
+        num_zero_ops = torch.sum(is_zero, dim=-1).to(torch.float32)
         self.num_zero_ops[name] = torch.round(torch.mean(num_zero_ops, dim=0))
     
     def _get_quantized_weight(self, layer_name):

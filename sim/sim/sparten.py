@@ -28,25 +28,14 @@ class Sparten(Accelerator):
         self.input_precision = input_precision
         self.pe_array_dim = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
         self.pe_dotprod_size = pe_dotprod_size
-
-        pe = PE([input_precision, input_precision], 
-                pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
-        super().__init__(pe, self.pe_array_dim, model_name, model)
-
-        self._init_mem()
         (self.i_num_zero, 
          self.o_num_zero, 
          self.w_num_zero, 
-         self.num_zero_ops) = self._calc_zero_ops(model_name, model, args)
-        self._check_layer_mem_size()
-    
-    def _calc_zero_ops(self, model_name, model, args):
-        zero_ops_profiler = SpartenZeroOps(model_name, model, args=args, device=self.DEVICE)
-        zero_ops_profiler.fit()
-        return (zero_ops_profiler.num_zero_input, 
-                zero_ops_profiler.num_zero_output, 
-                zero_ops_profiler.num_zero_weight, 
-                zero_ops_profiler.num_zero_ops)
+         self.num_zero_ops) = self._calc_zero_ops(model_name, model, pe_dotprod_size, args)
+        
+        pe = PE([input_precision, input_precision], 
+                pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
+        super().__init__(pe, self.pe_array_dim, model_name, model)
     
     def calc_cycle(self):
         total_cycle = 0
@@ -70,21 +59,18 @@ class Sparten(Accelerator):
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        cycle_layer_compute = self._calc_conv2d_cycle(name, w_dim, o_dim)
+                        cycle_layer_compute = self._calc_cycle_conv2d(name, w_dim, o_dim)
                     else: # depthwise conv
-                        cycle_layer_compute = self._calc_dwconv_cycle(name, w_dim, i_dim, o_dim)
+                        cycle_layer_compute = self._calc_cycle_dwconv(name, w_dim, i_dim, o_dim)
                 else:
-                    cycle_layer_compute = self._calc_fc_cycle(name, w_dim, o_dim)
+                    cycle_layer_compute = self._calc_cycle_fc(name, w_dim, o_dim)
                 self._layer_cycle_compute[name] = cycle_layer_compute
             '''
             else:
                 self._layer_cycle_compute[name] = 0
             '''
 
-    def _calc_conv2d_cycle(self, layer_name, w_dim, o_dim):
-        # wq_b dimension: [bit_significance, cout, k, k, cw]
-        wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-
+    def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim):
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
@@ -129,7 +115,7 @@ class Sparten(Accelerator):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
     
-    def _calc_dwconv_cycle(self, layer_name, w_dim, i_dim, o_dim):
+    def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
 
@@ -175,7 +161,7 @@ class Sparten(Accelerator):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
 
-    def _calc_fc_cycle(self, layer_name, w_dim, o_dim):
+    def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
 
@@ -215,17 +201,11 @@ class Sparten(Accelerator):
         cycle_batch = math.ceil(batch_size / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
- 
-    def calc_compute_energy(self):
-        num_pe = self.pe_array.total_unit_count
-        num_cycle_compute = self.cycle_compute
-        compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
-        return compute_energy
     
     def _calc_dram_cycle(self):
         self._layer_cycle_dram = {}
         i_prec = self.input_precision
-        w_prec_pad = self.input_precision
+        w_prec = self.input_precision
         dram_bandwidth = self.dram.rw_bw * 2
         size_sram_i = self.i_sram.size / 8
         self._read_layer_input = True
@@ -235,7 +215,7 @@ class Sparten(Accelerator):
             num_dram_fetch_w, num_dram_fetch_i = self._layer_mem_refetch[name]
             cycle_layer_dram = 0
             if w_dim is not None:
-                cycle_dram_load_w = self._w_mem_required[name] * w_prec_pad / dram_bandwidth
+                cycle_dram_load_w = self._w_mem_required[name] * w_prec / dram_bandwidth
                 cycle_dram_load_w *= num_dram_fetch_w
 
                 i_mem_required = self._i_mem_required[name]
@@ -254,56 +234,105 @@ class Sparten(Accelerator):
                     self._read_layer_input = True
                 
                 cycle_layer_dram = cycle_dram_load_w + cycle_dram_write_o + cycle_dram_load_i
-            '''
-            else:
-                cycle_layer_dram = self._calc_residual_dram_latency(o_dim)
-            '''
             self._layer_cycle_dram[name] = int(cycle_layer_dram)
-    
-    def _calc_residual_dram_latency(self, o_dim):
-        i_prec = self.input_precision
-        dram_bandwidth = self.dram.rw_bw * 2 # DDR
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, cout = o_dim
-        total_cycle = math.ceil(cout * i_prec / dram_bandwidth) * oh * ow * batch_size
-        return total_cycle
-    
-    def _calc_num_mem_refetch(self):
-        # If the on-chip buffer size is not big enough, 
-        # we need to refetch input tiles or weight tiles from DRAM
-        self._layer_mem_refetch = {}
-        size_sram_w   = self.w_sram.size / 8
-        size_sram_i   = self.i_sram.size / 8
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            if w_dim is not None:
-                w_mem_required = self._w_mem_required[name]
-                i_mem_required = self._i_mem_required[name]
-                if ( w_mem_required > size_sram_w ) and ( i_mem_required > size_sram_i ):
-                    # need DRAM refetch
-                    num_refetch_input = math.ceil(w_mem_required / size_sram_w)
-                    num_refetch_weight = math.ceil(i_mem_required / size_sram_i)
-                    total_fetch_weight = num_refetch_weight * w_mem_required
-                    total_fetch_input = num_refetch_input * i_mem_required
-                    #print('Need DRAM refetch ...')
-                    #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
-                    if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
-                        #print(f'Refetch weight for {num_refetch_weight} times ...')
-                        # refetch all weight for every input tile
-                        self._layer_mem_refetch[name] = (num_refetch_weight, 1)
-                    else:
-                        #print(f'Refetch input for {num_refetch_input} times ...')
-                        # refetch all input for every weight tile
-                        self._layer_mem_refetch[name] = (1, num_refetch_input)
-                else:
-                    # no need refetch
-                    self._layer_mem_refetch[name] = (1, 1)
         
     def calc_compute_energy(self):
         num_pe = self.pe_array.total_unit_count
         num_cycle_compute = self.cycle_compute
         compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy
+    
+    def calc_pe_array_tile(self):
+        total_tile = 0
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    cin = i_dim[3]
+                    cw  = w_dim[2]
+                    if cin == cw: 
+                        total_tile += self._calc_tile_conv2d(w_dim, o_dim)
+                    else: # depthwise conv
+                        total_tile += self._calc_tile_dwconv(w_dim, i_dim, o_dim)
+                else:
+                    total_tile += self._calc_tile_fc(w_dim, o_dim)
+        return total_tile
+    
+    def _calc_tile_conv2d(self, w_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
+        '''
+        if ( k**2 > cw ):
+            tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
+        else:
+            tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        '''
+        tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
+        tile_cout  = math.ceil(cout / num_pe_row)
+        tile_ow    = math.ceil(ow / num_pe_col)
+        tile_oh    = oh
+
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
+    
+    def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_col = self.pe_array_dim['w']
+
+        # kernel size, kernel input channel, output channel
+        _, _, _, cin = i_dim
+        # kernel size, kernel input channel, output channel
+        k, _, cw, cout = w_dim
+        # batch size, output feature width, output feature height, output channel
+        batch_size, ow, oh, _ = o_dim
+
+        assert cin != cw, 'Not a depth-wise convolution!'
+
+        # tile_kernel: number of tiles to process a kernel
+        # tile_cout:   number of tiles along output channel
+        # tile_ow:     number of tiles along output width
+        # tile_oh:     number of tiles along output height
+        tile_kernel = math.ceil((k**2) / pe_group_size) * cw
+        tile_cout   = cout
+        tile_ow     = math.ceil(ow / num_pe_col)
+        tile_oh     = oh
+
+        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
+        total_tile = tile_per_batch * batch_size
+        return total_tile
+
+    def _calc_tile_fc(self, w_dim, o_dim):
+        pe_group_size = self.pe_dotprod_size
+        num_pe_row = self.pe_array_dim['h']
+        num_pe_col = self.pe_array_dim['w']
+
+        # input channel, output channel
+        cin, cout = w_dim
+        # batch size, output channel
+        batch_size, _ = o_dim
+
+        # tile_in_channel:   number of tiles along input channel
+        # tile_cout:  number of tiles along output channel
+        tile_in_channel  = math.ceil(cin / pe_group_size)
+        tile_cout        = math.ceil(cout / num_pe_row)
+        tile_batch       = math.ceil(batch_size / num_pe_col)
+
+        total_tile = (tile_in_channel * tile_cout * tile_batch)
+        return total_tile
     
     def calc_sram_rd_energy(self):
         w_sram_rd_cost = self.w_sram.r_cost
@@ -335,193 +364,14 @@ class Sparten(Accelerator):
             if w_dim is not None:
                 num_fetch_w, num_fetch_i = self._layer_mem_refetch[name]
                 if len(w_dim) == 4:
-                    total_energy += self._calc_conv_sram_wr_energy(w_dim, i_dim, o_dim,
+                    total_energy += self._calc_sram_wr_energy_conv(w_dim, i_dim, o_dim,
                                                              num_fetch_w, num_fetch_i)
                 else:
-                    total_energy += self._calc_fc_sram_wr_energy(layer_idx, w_dim, o_dim, 
+                    total_energy += self._calc_sram_wr_energy_fc(layer_idx, w_dim, o_dim, 
                                                            num_fetch_w, num_fetch_i)
         return total_energy
     
-    def _check_layer_mem_size(self):
-        self._w_mem_required = {}
-        self._i_mem_required = {}
-        self._o_mem_required = {}
-        w_prec = self.input_precision
-        i_prec = self.input_precision
-
-        # scaling memory to store metadata, i.e. sparse map
-        w_mem_scaling = (w_prec + 1) / w_prec 
-        i_mem_scaling = (i_prec + 1) / i_prec 
-        o_mem_scaling = i_mem_scaling 
-
-        for layer_idx, name in enumerate(self.layer_name_list):
-            w_dim = self.weight_dim[name]
-            i_dim = self.input_dim[name]
-            o_dim = self.output_dim[name]
-            w_num_total = np.prod(w_dim)
-            o_num_total = np.prod(o_dim)
-            i_num_total = np.prod(i_dim)
-            w_num_zero  = self.w_num_zero[name]
-            i_num_zero  = self.i_num_zero[name]
-            o_num_zero  = self.o_num_zero[name]
-            w_density   = 1 - (w_num_zero / w_num_total)
-            i_density   = 1 - (i_num_zero / i_num_total)
-            o_density   = 1 - (o_num_zero / o_num_total)
-            
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    # kernel size, kernel input channel, output channel
-                    k, _, cw, cout = w_dim
-                    # batch size, input feature width, input feature height, input channel
-                    batch_size, iw, ih, cin = i_dim
-                    # batch size, output feature width, output feature height, output channel
-                    _, ow, oh, _ = o_dim
-
-                    w_mem_dense = math.ceil(cw * w_prec / 8) * k**2 * cout
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
-                    self._w_mem_required[name] = w_mem_dense * w_density * w_mem_scaling
-                    self._i_mem_required[name] = i_mem_dense * i_density * i_mem_scaling
-                    self._o_mem_required[name] = o_mem_dense * o_density * o_mem_scaling
-                else:
-                    # input channel, output channel
-                    cin, cout = w_dim
-                    # batch size, output channel
-                    batch_size, _ = o_dim
-
-                    w_mem_dense = math.ceil(cin * i_prec / 8) * cout * batch_size
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size
-                    if layer_idx == (len(self.layer_name_list) - 1):
-                        o_mem_dense = 0
-                    else:
-                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size
-                    self._w_mem_required[name] = w_mem_dense * w_density * w_mem_scaling
-                    self._i_mem_required[name] = i_mem_dense * i_density * i_mem_scaling
-                    self._o_mem_required[name] = o_mem_dense * o_density * o_mem_scaling
-
-    def calc_dram_energy(self):
-        energy = 0
-        self._read_layer_input = True
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    energy += self._calc_conv_dram_energy(name)
-                else:
-                    energy += self._calc_fc_dram_energy(name)
-            '''
-            else:
-                energy += self._calc_residual_dram_energy(o_dim)
-            '''
-        return energy
-    
-    def calc_pe_array_tile(self):
-        total_tile = 0
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            i_dim = self.input_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    cin = i_dim[3]
-                    cw  = w_dim[2]
-                    if cin == cw: 
-                        total_tile += self._calc_conv2d_tile(w_dim, o_dim)
-                    else: # depthwise conv
-                        total_tile += self._calc_dwconv_tile(w_dim, i_dim, o_dim)
-                else:
-                    total_tile += self._calc_fc_tile(w_dim, o_dim)
-        return total_tile
-    
-    def _calc_conv2d_tile(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
-
-        # kernel size, kernel input channel, output channel
-        k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
-
-        # tile_kernel: number of tiles to process a kernel
-        # tile_cout:   number of tiles along output channel
-        # tile_ow:     number of tiles along output width
-        # tile_oh:     number of tiles along output height
-        '''
-        if ( k**2 > cw ):
-            tile_kernel   = math.ceil((k**2) / pe_group_size) * cw
-        else:
-            tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
-        '''
-        tile_kernel   = math.ceil(cw / pe_group_size) * (k**2)
-        tile_cout  = math.ceil(cout / num_pe_row)
-        tile_ow    = math.ceil(ow / num_pe_col)
-        tile_oh    = oh
-
-        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
-        return total_tile
-    
-    def _calc_dwconv_tile(self, w_dim, i_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_col = self.pe_array_dim['w']
-
-        # kernel size, kernel input channel, output channel
-        _, _, _, cin = i_dim
-        # kernel size, kernel input channel, output channel
-        k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
-
-        assert cin != cw, 'Not a depth-wise convolution!'
-
-        # tile_kernel: number of tiles to process a kernel
-        # tile_cout:   number of tiles along output channel
-        # tile_ow:     number of tiles along output width
-        # tile_oh:     number of tiles along output height
-        tile_kernel = math.ceil((k**2) / pe_group_size) * cw
-        tile_cout   = cout
-        tile_ow     = math.ceil(ow / num_pe_col)
-        tile_oh     = oh
-
-        tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
-        return total_tile
-
-    def _calc_fc_tile(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
-
-        # input channel, output channel
-        cin, cout = w_dim
-        # batch size, output channel
-        batch_size, _ = o_dim
-
-        # tile_in_channel:   number of tiles along input channel
-        # tile_cout:  number of tiles along output channel
-        tile_in_channel  = math.ceil(cin / pe_group_size)
-        tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size / num_pe_col)
-
-        total_tile = (tile_in_channel * tile_cout * tile_batch)
-        return total_tile
-    
-    def _calc_residual_sram_energy(self, o_dim):
-        i_prec = self.input_precision
-        i_sram_rd_cost = self.i_sram.r_cost
-        i_sram_wr_cost = self.i_sram.w_cost_min
-        i_sram_min_wr_bw = self.i_sram.w_bw_min
-
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, cout = o_dim
-
-        # energy_input: energy to write the residual map to SRAM, and then read out to DRAM
-        num_i_sram_rw = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size 
-        total_energy = num_i_sram_rw * (i_sram_rd_cost + i_sram_wr_cost)
-        return total_energy
-    
-    def _calc_conv_sram_wr_energy(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
+    def _calc_sram_wr_energy_conv(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.input_precision
         i_prec = self.input_precision
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -549,7 +399,7 @@ class Sparten(Accelerator):
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
         return total_energy
     
-    def _calc_fc_sram_wr_energy(self, layer_idx, w_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
+    def _calc_sram_wr_energy_fc(self, layer_idx, w_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.input_precision
         i_prec = self.input_precision
         w_sram_wr_cost = self.w_sram.w_cost_min
@@ -571,8 +421,20 @@ class Sparten(Accelerator):
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr
         return total_energy
-
-    def _calc_conv_dram_energy(self, layer_name):
+    
+    def calc_dram_energy(self):
+        energy = 0
+        self._read_layer_input = True
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    energy += self._calc_dram_energy_conv(name)
+                else:
+                    energy += self._calc_dram_energy_fc(name)
+        return energy
+    
+    def _calc_dram_energy_conv(self, layer_name):
         i_prec = self.input_precision
         w_prec = self.input_precision
         bus_width = self.dram.rw_bw
@@ -606,21 +468,7 @@ class Sparten(Accelerator):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
-    def _calc_residual_dram_energy(self, o_dim):
-        i_prec = self.input_precision
-        bus_width = self.dram.rw_bw
-        rd_cost = self.dram.r_cost
-
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, cout = o_dim
-
-        # energy_input: energy to read the residual map
-        energy_input = math.ceil(cout * i_prec / bus_width) * oh * ow * batch_size * rd_cost
-
-        total_energy = energy_input
-        return total_energy
-    
-    def _calc_fc_dram_energy(self, layer_name):
+    def _calc_dram_energy_fc(self, layer_name):
         w_prec = self.input_precision
         i_prec = self.input_precision
         size_sram_i = self.i_sram.size / 8
@@ -659,6 +507,104 @@ class Sparten(Accelerator):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
+    def _calc_zero_ops(self, model_name, model, group_size, args):
+        zero_ops_profiler = SpartenZeroOps(model_name, model, group_size, args=args, device=self.DEVICE)
+        zero_ops_profiler.fit()
+        return (zero_ops_profiler.num_zero_input, 
+                zero_ops_profiler.num_zero_output, 
+                zero_ops_profiler.num_zero_weight, 
+                zero_ops_profiler.num_zero_ops)
+    
+    def _check_layer_mem_size(self):
+        self._w_mem_required = {}
+        self._i_mem_required = {}
+        self._o_mem_required = {}
+        w_prec = self.input_precision
+        i_prec = self.input_precision
+
+        # scaling memory to store metadata, i.e. sparse map
+        w_mem_scaling = (w_prec + 1) / w_prec 
+        i_mem_scaling = (i_prec + 1) / i_prec 
+        o_mem_scaling = i_mem_scaling 
+
+        for layer_idx, name in enumerate(self.layer_name_list):
+            w_dim = self.weight_dim[name]
+            i_dim = self.input_dim[name]
+            o_dim = self.output_dim[name]
+            w_num_total = np.prod(w_dim)
+            o_num_total = np.prod(o_dim)
+            i_num_total = np.prod(i_dim)
+            w_num_zero  = self.w_num_zero[name]
+            i_num_zero  = self.i_num_zero[name]
+            o_num_zero  = self.o_num_zero[name]
+            w_density   = 1 - (w_num_zero / w_num_total)
+            i_density   = 1 - (i_num_zero / i_num_total)
+            o_density   = 1 - (o_num_zero / o_num_total)
+            #print(name)
+            #print(w_density, i_density, o_density)
+            
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    # kernel size, kernel input channel, output channel
+                    k, _, cw, cout = w_dim
+                    # batch size, input feature width, input feature height, input channel
+                    batch_size, iw, ih, cin = i_dim
+                    # batch size, output feature width, output feature height, output channel
+                    _, ow, oh, _ = o_dim
+
+                    w_mem_dense = math.ceil(cw * w_prec / 8) * k**2 * cout
+                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
+                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density * w_mem_scaling / 8) * 8
+                    self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
+                    self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
+                else:
+                    # input channel, output channel
+                    cin, cout = w_dim
+                    # batch size, output channel
+                    batch_size, _ = o_dim
+
+                    w_mem_dense = math.ceil(cin * i_prec / 8) * cout * batch_size
+                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size
+                    if layer_idx == (len(self.layer_name_list) - 1):
+                        o_mem_dense = 0
+                    else:
+                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size
+                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density * w_mem_scaling / 8) * 8
+                    self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
+                    self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
+    
+    def _calc_num_mem_refetch(self):
+        # If the on-chip buffer size is not big enough, 
+        # we need to refetch input tiles or weight tiles from DRAM
+        self._layer_mem_refetch = {}
+        size_sram_w   = self.w_sram.size / 8
+        size_sram_i   = self.i_sram.size / 8
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            if w_dim is not None:
+                w_mem_required = self._w_mem_required[name]
+                i_mem_required = self._i_mem_required[name]
+                if ( w_mem_required > size_sram_w ) and ( i_mem_required > size_sram_i ):
+                    # need DRAM refetch
+                    num_refetch_input  = math.ceil(w_mem_required / size_sram_w)
+                    num_refetch_weight = math.ceil(i_mem_required / size_sram_i)
+                    total_fetch_weight = num_refetch_weight * w_mem_required
+                    total_fetch_input  = num_refetch_input * i_mem_required
+                    #print('Need DRAM refetch ...')
+                    #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
+                    if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
+                        #print(f'Refetch weight for {num_refetch_weight} times ...')
+                        # refetch all weight for every input tile
+                        self._layer_mem_refetch[name] = (num_refetch_weight, 1)
+                    else:
+                        #print(f'Refetch input for {num_refetch_input} times ...')
+                        # refetch all input for every weight tile
+                        self._layer_mem_refetch[name] = (1, num_refetch_input)
+                else:
+                    # no need refetch
+                    self._layer_mem_refetch[name] = (1, 1)
+
     def _init_mem(self):
         local_buffer_bank = self.pe_array_dim['h'] * self.pe_array_dim['w']
         local_buffer_config = {
