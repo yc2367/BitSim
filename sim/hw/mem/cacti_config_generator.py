@@ -1,5 +1,6 @@
 import os
 from mem_util import MemUserConfig
+from typing import Dict
 
 class CactiConfig:
 
@@ -274,7 +275,7 @@ class CactiConfig:
 
         self.config_options['line_size'] = {'string': '-block size (bytes) ',
                                             'option': [8, 16, 24, 32, 64],
-                                            'default': 64}
+                                            'default': 32}
 
         # Unit for IO_bus_width is bit.
         self.config_options['IO_bus_width'] = {'string': '# Wordwidth (bit)\n' + '-output/input bus width ',
@@ -318,9 +319,9 @@ class CactiConfig:
                                                            '"itrs-lop"', '"lp-dram"', '"comm-dram"'],
                                                 'default': '"itrs-hp"'}
 
-    def change_default_value(self, name_list, new_value_list):
-        for idx, name in enumerate(name_list):
-            self.config_options[name]['default'] = new_value_list[idx]
+    def change_default_value(self, new_config: Dict):
+        for option, new_value in new_config.items():
+            self.config_options[option]['default'] = new_value
 
     def write_config(self, user_config, path):
         f = open(path, "w+")

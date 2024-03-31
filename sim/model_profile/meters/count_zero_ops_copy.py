@@ -121,4 +121,3 @@ class CountZeroOps(Profiler):
             is_zero = ((i_patch * weight) == 0)
             num_zero_ops[j_bi] = torch.sum(is_zero, dim=-1).to(torch.float32)
         self.num_zero_ops[name] = torch.round(torch.mean(num_zero_ops, dim=0))
-        print(num_zero_ops)

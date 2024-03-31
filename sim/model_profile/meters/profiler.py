@@ -15,11 +15,11 @@ def hook(name, state_dict):
     return hook
 
 class Profiler(object):
-    def __init__(self, name, model:nn.Module, device, input_size:int, precision=32) -> None:
+    def __init__(self, model_name, model:nn.Module, device, input_size:int, precision=32) -> None:
         self.input_size = input_size
         self.device = device
         self.precision = precision
-        self.name = name
+        self.model_name = model_name
         
         if device == "cuda":
             assert torch.cuda.is_available(), "CUDA is not available"
@@ -96,7 +96,7 @@ class Profiler(object):
         print(f"Memory usage (READ from GPU) = {memory} MB")
 
         # update the info
-        self.info["name"] = self.name
+        self.info["name"] = self.model_name
         self.info["device"] = self.device_name
         self.info["macs"] = macs
         self.info["flops"] = macs * 2

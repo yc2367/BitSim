@@ -10,13 +10,14 @@ from sim.util.bin_int_convert import int_to_twosComplement
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
-    DISPATCHER_ENERGY_PER_COL = 0.072625
-    PE_ENERGY = 0.46625 # energy per 8-way DP PE
-    #PE_ENERGY = 0.30625
-    W_REG_ENERGY_PER_ROW = 0.763 # energy (pJ) of the weight scheduler for a PE row
-    #W_REG_ENERGY_PER_ROW = 0.38125
-    I_REG_ENERGY_PER_COL = 0.53 + DISPATCHER_ENERGY_PER_COL # energy (pJ) of the activation register file for a PE column
-    #I_REG_ENERGY_PER_COL = 0.2625 + DISPATCHER_ENERGY_PER_COL 
+    PR_SCALING = 1.3 # scaling factor to account for post placement and routing
+    DISPATCHER_ENERGY_PER_COL = 0.072625 
+    PE_ENERGY = 0.46625 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
+    #PE_ENERGY = 0.30625 * PR_SCALING
+    W_REG_ENERGY_PER_ROW = 0.763 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
+    #W_REG_ENERGY_PER_ROW = 0.38125 * PR_SCALING
+    I_REG_ENERGY_PER_COL = (0.53 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column
+    #I_REG_ENERGY_PER_COL = (0.2625 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING
     PE_AREA = 1
 
     def __init__(self, 

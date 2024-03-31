@@ -12,12 +12,13 @@ from sim.util.bin_int_convert import int_to_twosComplement
 
 # Pragmatic accelerator
 class Bitlet(Stripes):
+    PR_SCALING = 1.3 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625
-    #PE_ENERGY = 0.32 # energy per PE
-    PE_ENERGY = 0.355 # energy per PE
-    W_REG_ENERGY_PER_ROW = 1.1325 # energy (pJ) of the weight shift register file for a PE row
-    #W_REG_ENERGY_PER_ROW = 0.61875 # energy (pJ) of the weight shift register file for a PE row
-    I_REG_ENERGY_PER_COL = 0.2625 + DISPATCHER_ENERGY_PER_COL # energy (pJ) of the activation register file for a PE column
+    #PE_ENERGY = 0.32 * PR_SCALING # energy per PE
+    PE_ENERGY = 0.355 * PR_SCALING # energy per PE
+    W_REG_ENERGY_PER_ROW = 1.1325 * PR_SCALING # energy (pJ) of the weight shift register file for a PE row
+    #W_REG_ENERGY_PER_ROW = 0.61875 * PR_SCALING
+    I_REG_ENERGY_PER_COL = (0.2625 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column
     PE_AREA = 1
 
     def __init__(self, 
@@ -241,7 +242,7 @@ class Bitlet(Stripes):
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 16 * 1024*8 * i_sram_bank, 
+                            'size': 8 * 1024*8 * i_sram_bank, 
                             'bank_count': i_sram_bank, 
                             'rw_bw': (self.pe_array_dim['w'] * i_prec) * i_sram_bank,
                             'r_port': 1, 

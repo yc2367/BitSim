@@ -1,6 +1,7 @@
 import yaml
 import os
 import argparse
+import math
 
 from cacti_config_generator import CactiConfig
 from mem_util import MemUserConfig
@@ -18,9 +19,7 @@ parser.add_argument('--mem_pool_path')
 args = parser.parse_args()
 
 mem_pool_path = args.mem_pool_path
-print(mem_pool_path)
 cacti_master_path = os.path.dirname(mem_pool_path) + '/cacti'
-print(f"{cacti_master_path=}")
 
 self_gen_folder_name = 'self_gen'
 self_gen_path = os.path.join(os.path.dirname(mem_pool_path), self_gen_folder_name)
@@ -28,7 +27,11 @@ if not os.path.isdir(self_gen_path):
     os.mkdir(self_gen_path)
 
 os.system(f'rm -rf {self_gen_path}/*')
+
 C = CactiConfig()
+IO_bus_width = int(args.IO_bus_width)
+if IO_bus_width < (C.config_options['line_size']['default'] * 8) / 2:
+    C.change_default_value({ 'line_size': math.ceil(int(IO_bus_width) / 64) * 8 })
 
 '''Function 1: set default value'''
 # C.change_default_value(['technology'], [0.090])

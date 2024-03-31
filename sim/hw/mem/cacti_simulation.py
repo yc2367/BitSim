@@ -90,7 +90,7 @@ class CactiSimulation:
         array_size = int(mem_config['size'] / 8 / mem_config['bank_count'])
         array_IO_bus_width = int(mem_config['rw_bw'] / mem_config['bank_count'])        
         try:
-            subprocess.check_output(
+            output = subprocess.check_output(
                 [
                     "python", cacti_top_path,
                     "--technology", str(mem_config['technology']),

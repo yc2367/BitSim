@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torchvision import datasets
+import pickle, os
 
 from model_profile.meters.profiler import Profiler
 from sim.util.model_quantized import MODEL
@@ -32,13 +33,14 @@ def feature_hook(name, state_dict):
     return hook
 
 
-class CountZeroOps(Profiler):
+class SpartenZeroOps(Profiler):
     def __init__(self, name, model: nn.Module, args, device, precision=32) -> None:
         (self.testloader, 
          self.num_classes, 
          self.input_size) = get_loader(args)
         super().__init__(name, model, device, self.input_size, precision) 
         self.model_q = MODEL[name].cpu() # quantized model
+        self.save_dir = args.sparten_save_dir
          
         self.layer_name_list = []
         self.num_zero_input = {} 
@@ -46,6 +48,9 @@ class CountZeroOps(Profiler):
         self.num_zero_weight = {} 
         # number of zero operations for every layer
         self.num_zero_ops = {}
+        # check if a conv2d is followed by a ReLU activation function, 
+        # this is used to measure output sparsity
+        self.is_relu = {}
 
     def hook(self):
         for n, m in self.model.named_modules():
@@ -61,16 +66,60 @@ class CountZeroOps(Profiler):
                 y = self.model(inputs)
             break
 
-    def fit(self):
-        self.forward()
+    def fit(self, create_new_dict=False):
+        current_layer_name = None
         for n, m in self.model.named_modules():
             if isinstance(m, nn.Conv2d):
-                self.count_zero_ops_conv(m ,n)
                 self.layer_name_list.append(n)
-            if isinstance(m, nn.Linear):
-                self.count_zero_ops_linear(m, n)
+                current_layer_name = n
+            elif isinstance(m, nn.Linear):
                 self.layer_name_list.append(n)
+            elif isinstance(m, nn.ReLU):
+                self.is_relu[current_layer_name] = True
 
+        layer_with_relu = self.is_relu.keys()
+        for n, _ in self.model.named_modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                if n in layer_with_relu:
+                    continue
+                else:
+                    self.is_relu[n] = False
+
+        save_dir = self.save_dir
+        model_name = self.model_name
+        file_num_zero_input  = save_dir + f'/{model_name}_num_zero_input.pickle'
+        file_num_zero_output = save_dir + f'/{model_name}_num_zero_output.pickle'
+        file_num_zero_weight = save_dir + f'/{model_name}_file_num_zero_weight.pickle'
+        file_num_zero_ops    = save_dir + f'/{model_name}_file_num_zero_ops.pickle'
+        dict_exists = os.path.isfile(file_num_zero_input) and \
+                        os.path.isfile(file_num_zero_output) and \
+                        os.path.isfile(file_num_zero_weight) and \
+                        os.path.isfile(file_num_zero_ops)
+        if create_new_dict or (not dict_exists):
+            self.forward()
+            for n, m in self.model.named_modules():
+                if isinstance(m, nn.Conv2d):
+                    self.count_zero_ops_conv(m ,n)
+                if isinstance(m, nn.Linear):
+                    self.count_zero_ops_linear(m, n)
+            with open(file_num_zero_input, 'wb') as f:
+                pickle.dump(self.num_zero_input, f)
+            with open(file_num_zero_output, 'wb') as f:
+                pickle.dump(self.num_zero_output, f)
+            with open(file_num_zero_weight, 'wb') as f:
+                pickle.dump(self.num_zero_weight, f)
+            with open(file_num_zero_ops, 'wb') as f:
+                pickle.dump(self.num_zero_ops, f)
+        else:
+            with open(file_num_zero_input, 'rb') as f:
+                self.num_zero_input = pickle.load(f)
+            with open(file_num_zero_output, 'rb') as f:
+                self.num_zero_output = pickle.load(f)
+            with open(file_num_zero_weight, 'rb') as f:
+                self.num_zero_weight = pickle.load(f)
+            with open(file_num_zero_ops, 'rb') as f:
+                self.num_zero_ops = pickle.load(f)
+        
     def count_zero_ops_conv(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
@@ -84,12 +133,12 @@ class CountZeroOps(Profiler):
         # kernel
         cin = layer.in_channels // layer.groups
 
-        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
-        self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
         self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
-        print(self.num_zero_input[name])
-        print(self.num_zero_output[name])
-        print(self.num_zero_weight[name])
+        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
+        if self.is_relu[name] == True:
+            self.num_zero_output[name] = round(torch.sum(o_feature <= 0).item() / bi)
+        else:
+            self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
 
         # count number of zero operations for every output pixel
         num_zero_ops = torch.zeros_like(o_feature)

@@ -11,6 +11,7 @@ parser.add_argument('--val_dir', type=str, default='./data/', help='test/validat
 parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size (default: 64)')
 
 parser.add_argument('--workers', type=int, default=4,help='number of data loading workers (default: 4)')
+parser.add_argument('--sparten_save_dir', type=str, default='./data/', help='sparten profiling save directory')
 
 args = parser.parse_args()
 name_list = ['resnet50', 'mobilenet_v2']
