@@ -4,8 +4,8 @@ set_app_var target_library "$tsmc28/tcbn28hpcplusbwp30p140ssg0p9vm40c.db"
 set_app_var link_library   "* $target_library"
 
 set run_module 0 ;
-set bit_func   2 ;
-set group_size 32 ;
+set bit_func   5 ;
+set group_size 16 ;
 
 set add_load 0 ;
 
@@ -58,8 +58,8 @@ if {$run_module == 1} {
         }
     } elseif {$bit_func == 5} {
         if {$group_size == 16} {
-            analyze -format sverilog $workdir/mac_unit_Parallel_128.v
-            elaborate mac_unit_Parallel_128_clk
+            analyze -format sverilog $workdir/mac_unit_Parallel.v
+            elaborate mac_unit_Parallel_clk
         } else {
             analyze -format sverilog $workdir/mac_unit_Parallel_64.v
             elaborate mac_unit_Parallel_64_clk
