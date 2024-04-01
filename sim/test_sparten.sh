@@ -2,7 +2,7 @@ if [ ! -d "/home/yc2367/BitSim/sim/model_profile/meters/sparten_saved_dict" ]; t
     mkdir /home/yc2367/BitSim/sim/model_profile/meters/sparten_saved_dict
 fi
 
-model=resnet50
+model=mobilenet_v2
 batch_size=128
 
 python3 -W ignore ./test_sparten.py \

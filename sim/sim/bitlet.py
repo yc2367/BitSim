@@ -77,7 +77,7 @@ class Bitlet(Stripes):
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
         # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
+        batch_size, oh ,ow, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -89,21 +89,33 @@ class Bitlet(Stripes):
             u_ti_cout = (ti_cout+1) * num_pe_row
             # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
             tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :, :, :]
-
-            for tk1 in range(k):
-                for tk2 in range(k):
-                    # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
-                    tile_k = tile_cout[:, :, tk1, tk2, :]
-                    iter_cw = math.ceil(cw / pe_group_size)
-                    for ti_cw in range(iter_cw):
-                        l_ti_cw = ti_cw * pe_group_size
-                        u_ti_cw = (ti_cw+1) * pe_group_size
-                        tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-
-                        cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=-1))
-                        cycle_kernel += int(cycle_tile_cw.item())
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
+            if ( k**2 > cw ):
+                iter_cw = cw
+                for ti_cw in range(iter_cw):
+                    # get the tile along kernel input channel: [bit_significance, tile_cout, k, k]
+                    tile_cw = tile_cout[:, :, :, :, ti_cw]
+                    tile_cw = tile_cw.flatten(start_dim=2, end_dim=3)
+                    iter_k  = math.ceil(k**2 / pe_group_size)
+                    for ti_k in range(iter_k):
+                        l_ti_k = ti_k * pe_group_size
+                        u_ti_k = (ti_k+1) * pe_group_size
+                        tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
+                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=-1))
+                        cycle_kernel += int(cycle_tile_k.item())
+            else:
+                for tk1 in range(k):
+                    for tk2 in range(k):
+                        # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
+                        tile_k = tile_cout[:, :, tk1, tk2, :]
+                        iter_cw = math.ceil(cw / pe_group_size)
+                        for ti_cw in range(iter_cw):
+                            l_ti_cw = ti_cw * pe_group_size
+                            u_ti_cw = (ti_cw+1) * pe_group_size
+                            tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=-1))
+                            cycle_kernel += int(cycle_tile_cw.item())
+        cycle_ow = math.ceil(ow / num_pe_col)
+        cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
         total_cycle = cycle_per_batch * batch_size
@@ -121,7 +133,7 @@ class Bitlet(Stripes):
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
         # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
+        batch_size, oh ,ow, _ = o_dim
 
         assert cin != cw, 'Not a depth-wise convolution!'
 
@@ -163,8 +175,8 @@ class Bitlet(Stripes):
 
         # input channel, output channel
         cin, cout = w_dim
-        # batch size, output channel
-        batch_size, _ = o_dim
+        # batch size, sample size, output channel
+        batch_size, sample_size, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -185,7 +197,7 @@ class Bitlet(Stripes):
 
                 cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))
                 cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size / num_pe_col)
+        cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
     
@@ -221,8 +233,7 @@ class Bitlet(Stripes):
                         }
         self.w_sram = MemoryInstance('w_sram', w_sram_config, 
                                      r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=None, 
-                                     min_w_granularity=self.pe_array_dim['h'] * w_prec,  
+                                     min_r_granularity=None, min_w_granularity=64,  
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
         i_prec = self.pe.input_precision_p
@@ -239,8 +250,7 @@ class Bitlet(Stripes):
                         }
         self.i_sram = MemoryInstance('i_sram', i_sram_config, 
                                      r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=64, 
-                                     min_w_granularity=self.pe_array_dim['w'] * i_prec, 
+                                     min_r_granularity=64, min_w_granularity=64, 
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
         dram_config = {

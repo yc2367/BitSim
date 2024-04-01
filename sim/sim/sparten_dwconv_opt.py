@@ -12,7 +12,7 @@ from model_profile.meters.sparten_profiler import SpartenProfiler
 
 # Pragmatic accelerator
 class Sparten(Accelerator):
-    LOCAL_OUTPUT_BUFFER_SIZE = 32
+    DISPATCHER_ENERGY_PER_COL = 0.072625
     PE_ENERGY = 1.1 # energy per PE, including MAC, prefix-sum, priority encoder
     PE_AREA = 1
 
@@ -99,6 +99,7 @@ class Sparten(Accelerator):
                         group_eff_ops = tile_ow[:, :, group_id]
                         cycle_group = torch.max(group_eff_ops)
                         cycle_group = max(cycle_group.item(), self.buffer_load_cycle)
+
                         total_cycle += int(cycle_group)
         return total_cycle
     
@@ -122,7 +123,6 @@ class Sparten(Accelerator):
                     for group_id in range(num_groups):
                         group_eff_ops = tile_ow[:, group_id]
                         cycle_group = torch.max(group_eff_ops)
-                        cycle_group = max(cycle_group.item(), self.buffer_load_cycle / 2)
                         total_cycle += int(cycle_group)
         return total_cycle
 
@@ -149,6 +149,7 @@ class Sparten(Accelerator):
                     group_eff_ops = tile_cout[:, :, group_id]
                     cycle_group = torch.max(group_eff_ops)
                     cycle_group = max(cycle_group.item(), self.buffer_load_cycle)
+                    
                     total_cycle += int(cycle_group)
         return total_cycle
     
@@ -185,6 +186,17 @@ class Sparten(Accelerator):
                 
                 cycle_layer_dram = cycle_dram_load_w + cycle_dram_write_o + cycle_dram_load_i
             self._layer_cycle_dram[name] = int(cycle_layer_dram)
+        
+    def calc_compute_energy(self):
+        num_pe = self.pe_array.total_unit_count
+        num_cycle_compute = self.cycle_compute
+        num_cycle_dw_conv = self.cycle_dwconv
+        num_pe_per_col = num_pe / self.pe_array_dim['w']
+
+        compute_energy_conv_fc = self.PE_ENERGY * num_pe * (num_cycle_compute - num_cycle_dw_conv)
+        compute_energy_dwconv  = self.PE_ENERGY * num_pe_per_col * num_cycle_dw_conv
+        compute_energy = compute_energy_conv_fc + compute_energy_dwconv
+        return compute_energy
     
     def calc_pe_array_tile(self):
         total_tile = 0
@@ -275,99 +287,61 @@ class Sparten(Accelerator):
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
     
-
-
-
-
-
-
-
-    def calc_compute_energy(self):
-        num_pe = self.pe_array.total_unit_count
-        num_cycle_compute = self.cycle_compute
-        compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
-        return compute_energy
-    
     def calc_local_buffer_rd_energy(self):
         buffer_rd_cost = self.local_buffer.r_cost
         num_cycle_compute = self.cycle_compute
-        total_energy = buffer_rd_cost * num_cycle_compute
-        return total_energy
-    
-    def calc_local_buffer_wr_energy(self):
-        buffer_wr_cost = self.local_buffer.w_cost_min
-        w_buffer_reuse = self.LOCAL_OUTPUT_BUFFER_SIZE
-        i_buffer_wr_cost = buffer_wr_cost / 2
-        w_buffer_wr_cost = buffer_wr_cost / 2
+        num_cycle_dw_conv = self.cycle_dwconv
+        buffer_rd_cost_per_col = buffer_rd_cost / self.pe_array_dim['w']
 
-        total_energy = 0
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            i_dim = self.input_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    cin = i_dim[3]
-                    cw  = w_dim[2]
-                    if cin == cw: 
-                        num_tile = self._calc_tile_conv2d(w_dim, o_dim)
-                        total_energy += (i_buffer_wr_cost * num_tile) + \
-                                        (w_buffer_wr_cost * num_tile / w_buffer_reuse)
-                    else: # depthwise conv
-                        num_tile = self._calc_tile_dwconv(w_dim, i_dim, o_dim)
-                        total_energy += ( (i_buffer_wr_cost * num_tile) +
-                                (w_buffer_wr_cost * num_tile / w_buffer_reuse) ) / self.pe_array_dim['h']
-                else:
-                    num_tile = self._calc_tile_fc(w_dim, o_dim)
-                    total_energy += (i_buffer_wr_cost * num_tile) + \
-                                    (w_buffer_wr_cost * num_tile / w_buffer_reuse)
+        buffer_rd_energy_conv_fc = buffer_rd_cost * (num_cycle_compute - num_cycle_dw_conv)
+        buffer_rd_energy_dwconv  = buffer_rd_cost_per_col * num_cycle_dw_conv
+        total_energy = buffer_rd_energy_conv_fc + buffer_rd_energy_dwconv
         return total_energy
     
     def calc_sram_rd_energy(self):
         w_sram_rd_cost = self.w_sram.r_cost
         i_sram_rd_cost = self.i_sram.r_cost
-        w_buffer_reuse = self.LOCAL_OUTPUT_BUFFER_SIZE
         num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
+        num_cycle_compute = self.cycle_compute
         num_tile = self.calc_pe_array_tile()
 
-        i_sram_rd_energy = i_sram_rd_cost * num_pe_col * num_tile
-        w_sram_rd_energy = w_sram_rd_cost * num_pe_row * num_tile / w_buffer_reuse
-        sram_rd_energy = i_sram_rd_energy + w_sram_rd_energy
-        return sram_rd_energy
+        sram_rd_energy = num_tile * (w_sram_rd_cost + i_sram_rd_cost)
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            o_dim = self.output_dim[name]
+            if w_dim is None:
+                sram_rd_energy += self._calc_residual_sram_energy(o_dim)
+        
+        w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle_compute
+        # The activation register is accessed every tile
+        i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_tile
+        total_energy = sram_rd_energy + w_reg_energy + i_reg_energy
+        return total_energy
     
     def calc_sram_wr_energy(self):
         total_energy = 0
-        for name in self.layer_name_list:
+        for layer_idx, name in enumerate(self.layer_name_list):
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
-            w_num_total = np.prod(w_dim)
-            o_num_total = np.prod(o_dim)
-            i_num_total = np.prod(i_dim)
-            w_num_zero  = self.w_num_zero[name]
-            i_num_zero  = self.i_num_zero[name]
-            o_num_zero  = self.o_num_zero[name]
-            w_density   = 1 - (w_num_zero / w_num_total)
-            i_density   = 1 - (i_num_zero / i_num_total)
-            o_density   = 1 - (o_num_zero / o_num_total)
             if w_dim is not None:
+                num_fetch_w, num_fetch_i = self._layer_mem_refetch[name]
                 if len(w_dim) == 4:
-                    total_energy += self._calc_sram_wr_energy_conv(name, w_dim, i_dim, o_dim, 
-                                                                   w_density, i_density, o_density)
+                    total_energy += self._calc_sram_wr_energy_conv(w_dim, i_dim, o_dim,
+                                                             num_fetch_w, num_fetch_i)
                 else:
-                    total_energy += self._calc_sram_wr_energy_fc(name, w_dim, i_dim, o_dim,
-                                                                 w_density, i_density, o_density)
+                    total_energy += self._calc_sram_wr_energy_fc(layer_idx, w_dim, o_dim, 
+                                                           num_fetch_w, num_fetch_i)
         return total_energy
     
-    def _calc_sram_wr_energy_conv(self, layer_name, w_dim, i_dim, o_dim, w_density, i_density, o_density):
+    def _calc_sram_wr_energy_conv(self, w_dim, i_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.input_precision
         i_prec = self.input_precision
         w_sram_wr_cost = self.w_sram.w_cost_min
         i_sram_wr_cost = self.i_sram.w_cost_min
         w_sram_min_wr_bw = self.w_sram.w_bw_min
         i_sram_min_wr_bw = self.i_sram.w_bw_min
-        num_fetch_w, num_fetch_i = self._layer_mem_refetch[layer_name]
 
         # kernel size, kernel input channel, output channel
         batch_size, iw, ih, cin = i_dim
@@ -378,47 +352,38 @@ class Sparten(Accelerator):
         
         # write energy, read from DRAM and write to SRAM
         num_w_sram_wr = math.ceil(cw * w_prec / w_sram_min_wr_bw) * (k**2) * cout
-        energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
+        energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * num_fetch_w
 
         num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw * batch_size
-        energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
+        energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * num_fetch_i
 
         num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size
-        energy_o_sram_wr = num_o_sram_wr * o_density * i_sram_wr_cost
+        energy_o_sram_wr = num_o_sram_wr * i_sram_wr_cost
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
         return total_energy
     
-    def _calc_sram_wr_energy_fc(self, layer_name, w_dim, i_dim, o_dim, w_density, i_density, o_density):
+    def _calc_sram_wr_energy_fc(self, layer_idx, w_dim, o_dim, num_fetch_w: int=1, num_fetch_i: int=1):
         w_prec = self.input_precision
         i_prec = self.input_precision
         w_sram_wr_cost = self.w_sram.w_cost_min
         i_sram_wr_cost = self.i_sram.w_cost_min
         w_sram_min_wr_bw = self.w_sram.w_bw_min
         i_sram_min_wr_bw = self.i_sram.w_bw_min
-        num_fetch_w, num_fetch_i = self._layer_mem_refetch[layer_name]
 
         # input channel, output channel
         cin, cout = w_dim
-        # batch size, sample size, input channel
-        batch_size, _, _ = i_dim
-        # batch size, sample size, output channel
-        _, sample_size, _ = o_dim
+        # batch size, output channel
+        batch_size, _ = o_dim
 
         # write energy, read from DRAM and write to SRAM
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
-        energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
+        energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
-        energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size
+        energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
-        if sample_size == 1: # CNN last FC layer
-            energy_o_sram_wr = 0
-        else:
-            energy_o_sram_wr = num_o_sram_wr * o_density * i_sram_wr_cost
-
-        total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
+        total_energy = energy_w_sram_wr + energy_i_sram_wr
         return total_energy
     
     def calc_dram_energy(self):
@@ -522,6 +487,7 @@ class Sparten(Accelerator):
         i_prec = self.input_precision
 
         # scaling memory to store metadata, i.e. sparse map
+        w_mem_scaling = (w_prec + 1) / w_prec 
         i_mem_scaling = (i_prec + 1) / i_prec 
         o_mem_scaling = i_mem_scaling 
 
@@ -538,8 +504,10 @@ class Sparten(Accelerator):
             w_density   = 1 - (w_num_zero / w_num_total)
             i_density   = 1 - (i_num_zero / i_num_total)
             o_density   = 1 - (o_num_zero / o_num_total)
-            
+            print(name)
+            print(w_dim)
             print(w_density, i_density, o_density)
+            
             if w_dim is not None:
                 if len(w_dim) == 4:
                     # kernel size, kernel input channel, output channel
@@ -552,7 +520,7 @@ class Sparten(Accelerator):
                     w_mem_dense = math.ceil(cw * w_prec / 8) * k**2 * cout
                     i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
                     o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
-                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
+                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density * w_mem_scaling / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
                 else:
@@ -567,7 +535,7 @@ class Sparten(Accelerator):
                         o_mem_dense = 0
                     else:
                         o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size * sample_size
-                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
+                    self._w_mem_required[name] = math.ceil(w_mem_dense * w_density * w_mem_scaling / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
     
@@ -613,7 +581,7 @@ class Sparten(Accelerator):
         local_buffer_config = {
                                 'technology': 0.028,
                                 'mem_type': 'sram', 
-                                'size': 512*8 * local_buffer_bank, 
+                                'size': 256*8 * local_buffer_bank, 
                                 'bank_count': local_buffer_bank, 
                                 'rw_bw': 2 * op_prec * local_buffer_bank,
                                 'r_port': 1, 
@@ -623,7 +591,7 @@ class Sparten(Accelerator):
         self.local_buffer = MemoryInstance('local_buffer', local_buffer_config, 
                                             r_cost=0, w_cost=0, latency=1, area=0, 
                                             min_r_granularity=None, 
-                                            min_w_granularity=group_size * op_prec * local_buffer_bank, 
+                                            min_w_granularity=group_size * (op_prec+1), 
                                             get_cost_from_cacti=True, 
                                             double_buffering_support=False)
         #print(self.local_buffer.r_cost, self.local_buffer.w_cost_min)
@@ -641,7 +609,7 @@ class Sparten(Accelerator):
                         }
         self.w_sram = MemoryInstance('w_sram', w_sram_config, 
                                      r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=None, min_w_granularity=64,  
+                                     min_r_granularity=None, min_w_granularity=None,  
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
         i_sram_bank = 16 // op_prec * (op_prec+1) # one bank feeds 1 PE column with value and metadata
@@ -657,7 +625,7 @@ class Sparten(Accelerator):
                         }
         self.i_sram = MemoryInstance('i_sram', i_sram_config, 
                                      r_cost=0, w_cost=0, latency=1, area=0, 
-                                     min_r_granularity=None, min_w_granularity=64, 
+                                     min_r_granularity=None, min_w_granularity=None, 
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
         dram_config = {
@@ -675,11 +643,10 @@ class Sparten(Accelerator):
                                     min_r_granularity=64, min_w_granularity=64, 
                                     get_cost_from_cacti=False, double_buffering_support=False)
      
-        #w_sram_bw = self.w_sram.rw_bw
+        w_sram_bw = self.w_sram.rw_bw
         i_sram_bw = self.i_sram.rw_bw
-        #num_pe_row = self.pe_array_dim['h']
+        num_pe_row = self.pe_array_dim['h']
         num_pe_col = self.pe_array_dim['w']
-        #w_buffer_load_cycle = (group_size * (op_prec + 1) * num_pe_row) / w_sram_bw
+        w_buffer_load_cycle = (group_size * (op_prec + 1) * num_pe_row) / w_sram_bw
         i_buffer_load_cycle = (group_size * (op_prec + 1) * num_pe_col) / i_sram_bw
-        self.buffer_load_cycle = i_buffer_load_cycle
-        #self.buffer_load_cycle = max(w_buffer_load_cycle, i_buffer_load_cycle)
+        self.buffer_load_cycle = max(w_buffer_load_cycle, i_buffer_load_cycle)

@@ -38,18 +38,27 @@ class DIM(Profiler):
         cin = layer.in_channels // layer.groups
 
         self.input_dim[name] = [bi, wi, hi, ci]
-        self.output_dim[name] = [bo, wo, ho, co]
+        self.output_dim[name] = [bo, ho, wo, co]
         self.weight_dim[name] = [k, k, cin, co]
 
     def linear_dim(self, layer: nn.Linear, name):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
-        bi, ci = i_feature.shape
-        bo, co = o_feature.shape
-        self.input_dim[name] = [bi, ci]
-        self.output_dim[name] = [bo, co]
-        self.weight_dim[name] = [ci, co]
-    
+        if len(i_feature.shape) == 2: # CNN
+            bi, ci = i_feature.shape
+            bo, co = o_feature.shape
+            self.input_dim[name] = [bi, 1, ci]
+            self.output_dim[name] = [bo, 1, co]
+            self.weight_dim[name] = [ci, co]
+        elif len(i_feature.shape) == 3: # transformer
+            bi, si, ci = i_feature.shape
+            bo, so, co = o_feature.shape
+            self.input_dim[name] = [bi, si, ci]
+            self.output_dim[name] = [bo, so, co]
+            self.weight_dim[name] = [ci, co]
+        else:
+            raise Exception('ERROR! More than 3 dimensions is provided for linear layer!')
+
     def bottleneck_dim(self, layer: resnet.Bottleneck, name):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
@@ -59,7 +68,7 @@ class DIM(Profiler):
 
         self.weight_dim[name] = None
         self.input_dim[name] = [bi, wi, hi, ci]
-        self.output_dim[name] = [bo, wo, ho, co]
+        self.output_dim[name] = [bo, ho, wo, co]
 
     def fit(self):
         super().forward()

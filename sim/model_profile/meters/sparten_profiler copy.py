@@ -33,7 +33,7 @@ def feature_hook(name, state_dict):
     return hook
 
 
-class SpartenZeroOps(Profiler):
+class SpartenProfiler(Profiler):
     def __init__(self, name, model: nn.Module, group_size, args, device, precision=32) -> None:
         (self.testloader, 
          self.num_classes, 
@@ -41,6 +41,10 @@ class SpartenZeroOps(Profiler):
         super().__init__(name, model, device, self.input_size, precision) 
         self.model_q = MODEL[name].cpu() # quantized model
         self.save_dir = args.sparten_save_dir
+        # @self.is_linear_batch: whether the linear layer receives an input batch
+        # if True, it means there is a batch of inputs (e.g. for CNNs)
+        # else, it means the linear layer batch_size dimension contains multiple patches or samples
+        self.is_linear_batch = args.is_linear_batch 
         self.group_size = group_size
          
         self.layer_name_list = []
@@ -48,7 +52,7 @@ class SpartenZeroOps(Profiler):
         self.num_zero_output = {} 
         self.num_zero_weight = {} 
         # number of zero operations for every layer
-        self.num_zero_ops = {}
+        self.num_eff_ops = {}
         # check if a conv2d is followed by a ReLU activation function, 
         # this is used to measure output sparsity
         self.bn_list = {}
@@ -61,7 +65,7 @@ class SpartenZeroOps(Profiler):
         # hook
         self.hook()
         for (inputs, _) in self.testloader:
-            inputs = inputs.cuda() if self.device == "cuda" else x
+            inputs = inputs.cuda() if self.device == "cuda" else inputs
             # forward pass 
             with torch.no_grad():
                 y = self.model(inputs)
@@ -83,28 +87,28 @@ class SpartenZeroOps(Profiler):
         file_num_zero_input  = save_dir + f'/{model_name}_num_zero_input.pickle'
         file_num_zero_output = save_dir + f'/{model_name}_num_zero_output.pickle'
         file_num_zero_weight = save_dir + f'/{model_name}_file_num_zero_weight.pickle'
-        file_num_zero_ops    = save_dir + f'/{model_name}_file_num_zero_ops.pickle'
+        file_num_eff_ops    = save_dir + f'/{model_name}_file_num_eff_ops.pickle'
         dict_exists = os.path.isfile(file_num_zero_input) and \
                         os.path.isfile(file_num_zero_output) and \
                         os.path.isfile(file_num_zero_weight) and \
-                        os.path.isfile(file_num_zero_ops)
+                        os.path.isfile(file_num_eff_ops)
         if create_new_dict or (not dict_exists):
             self.forward()
             for n, m in self.model.named_modules():
                 if isinstance(m, nn.Conv2d):
-                    self.count_zero_value_conv(m ,n)
-                    self.count_zero_ops_conv(m ,n)
+                    self._calc_zero_value_conv(m ,n)
+                    self._calc_eff_ops_conv(m ,n)
                 if isinstance(m, nn.Linear):
-                    self.count_zero_value_linear(m ,n)
-                    self.count_zero_ops_linear(m, n)
+                    self._calc_zero_value_linear(m ,n)
+                    self._calc_eff_ops_linear(m, n)
             with open(file_num_zero_input, 'wb') as f:
                 pickle.dump(self.num_zero_input, f)
             with open(file_num_zero_output, 'wb') as f:
                 pickle.dump(self.num_zero_output, f)
             with open(file_num_zero_weight, 'wb') as f:
                 pickle.dump(self.num_zero_weight, f)
-            with open(file_num_zero_ops, 'wb') as f:
-                pickle.dump(self.num_zero_ops, f)
+            with open(file_num_eff_ops, 'wb') as f:
+                pickle.dump(self.num_eff_ops, f)
         else:
             with open(file_num_zero_input, 'rb') as f:
                 self.num_zero_input = pickle.load(f)
@@ -112,10 +116,10 @@ class SpartenZeroOps(Profiler):
                 self.num_zero_output = pickle.load(f)
             with open(file_num_zero_weight, 'rb') as f:
                 self.num_zero_weight = pickle.load(f)
-            with open(file_num_zero_ops, 'rb') as f:
-                self.num_zero_ops = pickle.load(f)
+            with open(file_num_eff_ops, 'rb') as f:
+                self.num_eff_ops = pickle.load(f)
     
-    def count_zero_value_conv(self, layer: nn.Conv2d, name:str):
+    def _calc_zero_value_conv(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight_quantized = self._get_quantized_weight(name)
@@ -128,7 +132,7 @@ class SpartenZeroOps(Profiler):
             o_feature = batchnorm(o_feature)
         self.num_zero_output[name] = round(torch.sum(o_feature <= 0).item() / bi)
     
-    def count_zero_value_linear(self, layer: nn.Conv2d, name:str):
+    def _calc_zero_value_linear(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight_quantized = self._get_quantized_weight(name)
@@ -140,7 +144,7 @@ class SpartenZeroOps(Profiler):
         self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
         self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
 
-    def count_zero_ops_conv(self, layer: nn.Conv2d, name:str):
+    def _calc_eff_ops_conv(self, layer: nn.Conv2d, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight = layer.weight
@@ -158,7 +162,7 @@ class SpartenZeroOps(Profiler):
         num_groups = math.ceil(k**2 * cin / group_size) 
         is_integer_num_group = ((k**2 * cin) % group_size) == 0
         if cin == layer.in_channels: # conv2D
-            num_zero_ops = torch.zeros([bo, cout, oh, ow, num_groups])
+            num_eff_ops = torch.zeros([bo, cout, oh, ow, num_groups])
             unfold = nn.Unfold(kernel_size=layer.kernel_size, padding=layer.padding, stride=layer.stride)
             i_feature = unfold(i_feature).permute([0, 2, 1])
             for j_cout in range(cout): # output channel dimension
@@ -167,10 +171,9 @@ class SpartenZeroOps(Profiler):
                     kernel = kernel.unsqueeze(-1).reshape([num_groups, group_size])
                     kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1, -1)
                     i_feature = i_feature.unsqueeze(-1).reshape([bi, oh*ow, num_groups, group_size])
-                    is_zero = ((i_feature * kernel) == 0)
-                    num_zero = torch.sum(is_zero, dim=-1)
-                    num_zero = num_zero.reshape((bi, oh, ow, num_groups))
-                    num_zero_ops[:, j_cout, :, :, :] = num_zero
+                    non_zero = ((i_feature * kernel) != 0)
+                    num_non_zero = torch.sum(non_zero, dim=-1)
+                    num_eff_ops[:, j_cout, :, :, :] = num_non_zero.reshape((bi, oh, ow, num_groups))
                 else:
                     kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1)
                     for j_group in range(num_groups):
@@ -179,51 +182,53 @@ class SpartenZeroOps(Profiler):
                         u_j_group = (j_group+1) * group_size
                         i_patch = i_feature[:, :, l_j_group:u_j_group]
                         w_patch = kernel[:, :, l_j_group:u_j_group]
-                        is_zero = ((i_patch * w_patch) == 0)
-                        num_zero = torch.sum(is_zero, dim=-1)
-                        num_zero_ops[:, j_cout, :, :, j_group] = num_zero.unsqueeze(1).reshape((bi, oh, ow))
-            print(num_zero_ops.shape)
+                        non_zero = ((i_patch * w_patch) != 0)
+                        num_non_zero = torch.sum(non_zero, dim=-1)
+                        num_eff_ops[:, j_cout, :, :, j_group] = num_non_zero.unsqueeze(1).reshape((bi, oh, ow))
         else: # depthwise
-            num_zero_ops = torch.zeros([bo, cout, oh, ow])
+            num_eff_ops = torch.zeros([bo, cout, oh, ow])
             unfold = nn.Unfold(kernel_size=layer.kernel_size, padding=layer.padding, stride=layer.stride)
             for j_cout in range(cout): # output channel dimension
                 image_channel = unfold(i_feature[:, j_cout].unsqueeze(1))
                 kernel = weight[j_cout].flatten().unsqueeze(-1).unsqueeze(0).expand(bi, -1, oh*ow)
-                is_zero = ((image_channel * kernel) == 0)
-                num_zero = torch.sum(is_zero, dim=1)
-                num_zero_ops[:, j_cout, :, :] = num_zero.unsqueeze(-1).reshape((bi, oh, ow))
-            num_zero_ops = num_zero_ops.unsqueeze(-1)
-        self.num_zero_ops[name] = torch.round(torch.mean(num_zero_ops, dim=0))
-        #print(self.num_zero_ops[name])
+                non_zero = ((image_channel * kernel) != 0)
+                num_non_zero = torch.sum(non_zero, dim=1)
+                num_eff_ops[:, j_cout, :, :] = num_non_zero.unsqueeze(-1).reshape((bi, oh, ow))
+            num_eff_ops = num_eff_ops.unsqueeze(-1)
+        self.num_eff_ops[name] = torch.round(torch.mean(num_eff_ops, dim=0))
         
-    def count_zero_ops_linear(self, layer: nn.Conv2d, name:str):
+    def _calc_eff_ops_linear(self, layer: nn.Linear, name:str, is_linear_batch: bool=False):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight = layer.weight
-        weight_quantized = self._get_quantized_weight(name)
         group_size = self.group_size
 
         # size
-        bi, cin  = i_feature.shape
-        bo, cout = o_feature.shape
+        if len(i_feature.shape) == 2:
+            bi, cin  = i_feature.shape
+            bo, cout = o_feature.shape
+            si = 1
+            so = 1
+        elif len(i_feature.shape) == 3:
+            bi, si, cin = i_feature.shape
+            bo, so, cout = o_feature.shape
+        else:
+            raise Exception('ERROR! More than 3 dimensions is provided for linear layer!')
+        
         assert bi == bo, 'ERROR! Batch size is not the same for input feature and output feature!'
 
-        self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
-        self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
-        self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
-
         num_groups = math.ceil(cin / group_size) 
-        num_zero_ops = torch.zeros([bo, cout, num_groups])
+        num_eff_ops = torch.zeros([bo, so, cout, num_groups])
         is_integer_num_group = (cin % group_size) == 0
 
         # count number of zero operations for every group
         if is_integer_num_group:
             kernel = weight.unsqueeze(-1).reshape([cout, num_groups, group_size])
-            kernel = kernel.unsqueeze(0).expand(bi, -1, -1, -1)
-            i_feature = i_feature.unsqueeze(-1).reshape([bi, num_groups, group_size])
+            kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, si, -1, -1, -1)
+            i_feature = i_feature.unsqueeze(-1).reshape([bi, si, num_groups, group_size])
             i_feature = i_feature.unsqueeze(1).expand([-1, cout, -1, -1])
-            is_zero = ((i_feature * kernel) == 0)
-            num_zero_ops = torch.sum(is_zero, dim=-1).to(torch.float32)
+            non_zero = ((i_feature * kernel) != 0)
+            num_eff_ops = torch.sum(non_zero, dim=-1).to(torch.float32)
         else:
             i_feature = i_feature.unsqueeze(1).expand(-1, cout, -1)
             kernel  = weight.unsqueeze(0).expand(bi, -1, -1)
@@ -233,10 +238,14 @@ class SpartenZeroOps(Profiler):
                 u_j_group = (j_group+1) * num_groups
                 i_patch = i_feature[:, :, l_j_group:u_j_group]
                 w_patch = kernel[:, :, l_j_group:u_j_group]
-                is_zero = ((i_patch * w_patch) == 0)
-                num_zero_ops[:, :, j_group] = torch.sum(is_zero, dim=-1).to(torch.float32)
-        self.num_zero_ops[name] = torch.round(torch.mean(num_zero_ops, dim=0))
-    
+                non_zero = ((i_patch * w_patch) != 0)
+                num_eff_ops[:, :, j_group] = torch.sum(non_zero, dim=-1).to(torch.float32)
+        if is_linear_batch:
+            num_eff_ops = torch.round(torch.mean(num_eff_ops, dim=0))
+            self.num_eff_ops[name] = num_eff_ops.unsqueeze(0)
+        else:
+            self.num_eff_ops[name] = num_eff_ops
+
     def _get_quantized_weight(self, layer_name):
         for name, layer in self.model_q.named_modules():
             if ( layer_name == name ):

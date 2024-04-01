@@ -76,8 +76,8 @@ class Pragmatic(Stripes):
 
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
+        # batch size, output feature height, output feature width, output channel
+        batch_size, oh, ow, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -89,8 +89,6 @@ class Pragmatic(Stripes):
             u_ti_cout = (ti_cout+1) * num_pe_row
             # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
             tile_cout = wq_b[:, l_ti_cout:u_ti_cout, :, :, :]
-            
-            '''
             if ( k**2 > cw ):
                 iter_cw = cw
                 for ti_cw in range(iter_cw):
@@ -101,27 +99,24 @@ class Pragmatic(Stripes):
                     for ti_k in range(iter_k):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
-                        if ( u_ti_k <= k**2 ):
-                            tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        else:
-                            tile_k = tile_cw[:, :, l_ti_k:]
+                        tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
                         cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
                         cycle_kernel += int(cycle_tile_k.item())
-            '''
-            for tk1 in range(k):
-                for tk2 in range(k):
-                    # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
-                    tile_k = tile_cout[:, :, tk1, tk2, :]
-                    iter_cw = math.ceil(cw / pe_group_size)
-                    for ti_cw in range(iter_cw):
-                        l_ti_cw = ti_cw * pe_group_size
-                        u_ti_cw = (ti_cw+1) * pe_group_size
-                        tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+            else:
+                iter_cw = math.ceil(cw / pe_group_size)
+                for tk1 in range(k):
+                    for tk2 in range(k):
+                        # get the tile along kernel width and height: [bit_significance, tile_cout, cw]
+                        tile_k = tile_cout[:, :, tk1, tk2, :]
+                        for ti_cw in range(iter_cw):
+                            l_ti_cw = ti_cw * pe_group_size
+                            u_ti_cw = (ti_cw+1) * pe_group_size
+                            tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
 
-                        cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
-                        cycle_kernel += int(cycle_tile_cw.item())
-        cycle_ow    = math.ceil(ow / num_pe_col)
-        cycle_oh    = oh
+                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
+                            cycle_kernel += int(cycle_tile_cw.item())
+        cycle_ow = math.ceil(ow / num_pe_col)
+        cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
         total_cycle = cycle_per_batch * batch_size
@@ -139,8 +134,8 @@ class Pragmatic(Stripes):
         _, _, _, cin = i_dim
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
-        # batch size, output feature width, output feature height, output channel
-        batch_size, ow, oh, _ = o_dim
+        # batch size, output feature height, output feature width, output channel
+        batch_size, oh, ow, _ = o_dim
 
         assert cin != cw, 'Not a depth-wise convolution!'
 
@@ -183,8 +178,8 @@ class Pragmatic(Stripes):
 
         # input channel, output channel
         cin, cout = w_dim
-        # batch size, output channel
-        batch_size, _ = o_dim
+        # batch size, sample size, output channel
+        batch_size, sample_size, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -205,7 +200,7 @@ class Pragmatic(Stripes):
                 
                 cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0))
                 cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size / num_pe_col)
+        cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
 
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
