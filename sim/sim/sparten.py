@@ -274,13 +274,6 @@ class Sparten(Accelerator):
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
-    
-
-
-
-
-
-
 
     def calc_compute_energy(self):
         num_pe = self.pe_array.total_unit_count
