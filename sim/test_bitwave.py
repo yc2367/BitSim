@@ -2,20 +2,21 @@ from sim.bitwave import Bitwave
 from model_profile.models.models import MODEL
 
 name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
-name = name_list[0]
+name = name_list[2]
 model = MODEL[name]
 model = model()
 
 if __name__ == "__main__":
-    acc = Bitwave(8, 8, 8, [64, 8], name, model, layer_prec={}, en_bitflip=True)
+    acc = Bitwave(8, 8, 16, [32, 16], name, model, layer_prec={}, en_bitflip=False)
     
+    total_cycle    = acc.calc_cycle()
     compute_energy = acc.calc_compute_energy() / 1e6
     sram_rd_energy = acc.calc_sram_rd_energy() / 1e6
     sram_wr_energy = acc.calc_sram_wr_energy() / 1e6
     dram_energy    = acc.calc_dram_energy() / 1e6
     total_energy   = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
     
-    print(f'total cycle:        {acc.calc_cycle()}')
+    print(f'total cycle:        {total_cycle}')
     print(f'weight buffer area: {acc.w_sram.area} mm2')
     print(f'input buffer area:  {acc.i_sram.area} mm2')
     print(f'compute energy:     {compute_energy} uJ')

@@ -33,10 +33,6 @@ class Accelerator:
         self.output_dim = dim_profiler.output_dim
 
         self.layer_name_list = dim_profiler.layer_name_list
-
-        self._init_mem()
-        self._check_layer_mem_size()
-        self._calc_num_mem_refetch()
     
     def _init_mem(self):
         raise NotImplementedError

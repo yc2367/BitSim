@@ -36,6 +36,9 @@ class Sparten(Accelerator):
                 pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, pe_array_dim, model_name, model)
 
+        self._init_mem()
+        self._check_layer_mem_size()
+        self._calc_num_mem_refetch()
         self.cycle_compute = None
     
     def calc_cycle(self):
@@ -434,8 +437,8 @@ class Sparten(Accelerator):
         return energy
     
     def _calc_dram_energy_conv(self, layer_name):
-        i_prec = self.input_precision
         w_prec = self.input_precision
+        i_prec = self.input_precision
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost
@@ -561,7 +564,7 @@ class Sparten(Accelerator):
                     # batch size, output channel
                     batch_size, sample_size, _ = o_dim
 
-                    w_mem_dense = math.ceil(cin * i_prec / 8) * cout * batch_size
+                    w_mem_dense = math.ceil(cin * w_prec / 8) * cout * batch_size
                     i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size * sample_size
                     if layer_idx == (len(self.layer_name_list) - 1):
                         o_mem_dense = 0

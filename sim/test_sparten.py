@@ -22,8 +22,7 @@ model = model(weights='DEFAULT')
 if __name__ == "__main__":
     acc = Sparten(8, 128, [32, 16], name, model, args)
 
-    print(f'total cycle: {acc.calc_cycle()}')
-
+    total_cycle    = acc.calc_cycle()
     compute_energy = acc.calc_compute_energy() / 1e6
     local_buffer_rd_energy = acc.calc_local_buffer_rd_energy() / 1e6
     local_buffer_wr_energy = acc.calc_local_buffer_wr_energy() / 1e6
@@ -33,6 +32,7 @@ if __name__ == "__main__":
     total_energy   = (compute_energy + local_buffer_rd_energy + local_buffer_wr_energy + 
                       sram_rd_energy + sram_wr_energy + dram_energy)
     
+    print(f'total cycle:               {total_cycle}')
     print(f'local buffer area:         {acc.local_buffer.area} mm2')
     print(f'weight buffer area:        {acc.w_sram.area} mm2')
     print(f'input buffer area:         {acc.i_sram.area} mm2')

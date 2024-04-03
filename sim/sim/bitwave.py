@@ -3,13 +3,15 @@ import torch
 import torch.nn as nn
 
 from typing import List, Dict
-from sim.stripes import Stripes
-from sim.util.model_quantized import MODEL
+from hw.accelerator import Accelerator
+from hw.mem.mem_instance import MemoryInstance
+from hw.alu.alu_unit import BitSerialPE
 
+from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_signMagnitude
 
 # Bitwave accelerator
-class Bitwave(Stripes):
+class Bitwave(Accelerator):
     PR_SCALING = 1.3 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625 
     PE_ENERGY = 0.2575 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
@@ -27,17 +29,30 @@ class Bitwave(Stripes):
                  layer_prec: Dict, # the precision of every layer
                  en_bitflip: bool=False # whether enable bitflip
                  ): 
+        assert len(pe_array_dim) == 2, \
+            f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
+        
+        self.pe_dotprod_size = pe_dotprod_size
+        pe = BitSerialPE(input_precision_s, input_precision_p, 
+                         pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
+        super().__init__(pe, pe_array_dim, model_name, model)
+
         self.en_bitflip = en_bitflip
         self.model_q = MODEL[model_name].cpu() # quantized model
-
-        super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)
-        
+        # supported dataflow in BitWave
+        # every tuple indicates (pe_dotprod_size, pe_array_height, pe_array_width)
+        self.dataflow = [(8, 32, 16), (16, 32, 8), (32, 32, 4), (128, 8, 1), 
+                         (16, 64, 1), (32, 32, 1), (16, 1, 16)]
         # to be modified later
-        self.layer_prec = {}
+        self.w_prec_config = {}
         for name in self.layer_name_list:
-            self.layer_prec[name] = input_precision_s
-    
+            self.w_prec_config[name] = input_precision_s
+
+        self._init_mem()
+        self._check_layer_mem_size()
+        self._calc_num_mem_refetch()
+        self.cycle_compute = None
+
     def calc_cycle(self):
         self._calc_compute_cycle()
         self._calc_dram_cycle()
@@ -46,29 +61,35 @@ class Bitwave(Stripes):
         for name in self.layer_name_list:
             cycle_layer_compute = self._layer_cycle_compute[name]
             cycle_layer_dram    = self._layer_cycle_dram[name]
-            print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
         self._layer_cycle_compute = {}
+        self._layer_dataflow = {}
         for name in self.layer_name_list:
-            cycle_layer_compute = 0
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
+            cycle_layer_compute = 1e8
+            best_dataflow = None
             if w_dim is not None:
-                if len(w_dim) == 4:
-                    cin = i_dim[3]
-                    cw  = w_dim[2]
-                    if cin == cw: 
-                        cycle_layer_compute = self._calc_cycle_conv2d(name, w_dim, o_dim)
-                    else: # depthwise conv
-                        cycle_layer_compute = self._calc_cycle_dwconv(name, w_dim, i_dim, o_dim)
-                else:
-                    cycle_layer_compute = self._calc_cycle_fc(name, w_dim, o_dim)
+                for dataflow in self.dataflow:
+                    if len(w_dim) == 4:
+                        cin = i_dim[3]
+                        cw  = w_dim[2]
+                        if cin == cw: 
+                            cycle_layer_compute_new = self._calc_cycle_conv2d(name, w_dim, o_dim, dataflow)
+                        else: # depthwise conv
+                            cycle_layer_compute_new = self._calc_cycle_dwconv(name, w_dim, i_dim, o_dim, dataflow)
+                    else:
+                        cycle_layer_compute_new = self._calc_cycle_fc(name, w_dim, o_dim, dataflow)
+                    if cycle_layer_compute_new < cycle_layer_compute:
+                        cycle_layer_compute = cycle_layer_compute_new
+                        best_dataflow = dataflow
                 self._layer_cycle_compute[name] = cycle_layer_compute
+                self._layer_dataflow[name] = best_dataflow
             '''
             else:
                 self._layer_cycle_compute[name] = 0
@@ -84,14 +105,14 @@ class Bitwave(Stripes):
         num_cycle = torch.max(num_bit_column_per_group)
         return num_cycle.item()
     
-    def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim):
+    def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :, :, :]
 
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
+        pe_group_size = dataflow[0]
+        num_pe_row = dataflow[1]
+        num_pe_col = dataflow[2]
 
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
@@ -123,7 +144,7 @@ class Bitwave(Stripes):
                         if self.en_bitflip:
                             cycle_tile_k = self._count_zero_bit_column(tile_k)
                         else:
-                            cycle_tile_k = self.layer_prec[layer_name] - 1
+                            cycle_tile_k = self.w_prec_config[layer_name] - 1
 
                         cycle_kernel += int(cycle_tile_k)
             else:
@@ -140,7 +161,7 @@ class Bitwave(Stripes):
                             if self.en_bitflip:
                                 cycle_tile_cw = self._count_zero_bit_column(tile_cw)
                             else:
-                                cycle_tile_cw = self.layer_prec[layer_name] - 1
+                                cycle_tile_cw = self.w_prec_config[layer_name] - 1
 
                             cycle_kernel += int(cycle_tile_cw)
         cycle_ow = math.ceil(ow / num_pe_col)
@@ -150,13 +171,13 @@ class Bitwave(Stripes):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
     
-    def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
+    def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :, :, :]
 
-        pe_group_size = self.pe_dotprod_size
-        num_pe_col = self.pe_array_dim['w']
+        pe_group_size = dataflow[0]
+        num_pe_col = dataflow[2]
 
         # kernel size, kernel input channel, output channel
         _, _, _, cin = i_dim
@@ -189,7 +210,7 @@ class Bitwave(Stripes):
                     if self.en_bitflip:
                         cycle_tile_k = self._count_zero_bit_column(tile_k)
                     else:
-                        cycle_tile_k = self.layer_prec[layer_name] - 1
+                        cycle_tile_k = self.w_prec_config[layer_name] - 1
 
                     cycle_kernel += int(cycle_tile_k)
         cycle_ow = math.ceil(ow / num_pe_col)
@@ -199,14 +220,14 @@ class Bitwave(Stripes):
         total_cycle = cycle_per_batch * batch_size
         return total_cycle
 
-    def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
+    def _calc_cycle_fc(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
         wq_b = wq_b[1:, :, :]
 
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
+        pe_group_size = dataflow[0]
+        num_pe_row = dataflow[1]
+        num_pe_col = dataflow[2]
 
         # input channel, output channel
         cin, cout = w_dim
@@ -233,7 +254,7 @@ class Bitwave(Stripes):
                 if not self.en_bitflip:
                     cycle_tile_cin = self._count_zero_bit_column(tile_cin)
                 else:
-                    cycle_tile_cin = self.layer_prec[layer_name] - 1
+                    cycle_tile_cin = self.w_prec_config[layer_name] - 1
 
                 cycle_kernel += int(cycle_tile_cin)
         cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
@@ -242,27 +263,30 @@ class Bitwave(Stripes):
         return total_cycle
     
     def calc_pe_array_tile(self):
+        if not bool(self.dataflow):
+            self.calc_cycle()
         total_tile = 0
         for name in self.layer_name_list:
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
+            dataflow = self._layer_dataflow[name]
             if w_dim is not None:
                 if len(w_dim) == 4:
                     cin = i_dim[3]
                     cw  = w_dim[2]
                     if cin == cw: 
-                        total_tile += self._calc_tile_conv2d(w_dim, o_dim)
+                        total_tile += self._calc_tile_conv2d(w_dim, o_dim, dataflow)
                     else: # depthwise conv
-                        total_tile += self._calc_tile_dwconv(w_dim, i_dim, o_dim)
+                        total_tile += self._calc_tile_dwconv(w_dim, i_dim, o_dim, dataflow)
                 else:
-                    total_tile += self._calc_tile_fc(w_dim, o_dim)
+                    total_tile += self._calc_tile_fc(w_dim, o_dim, dataflow)
         return total_tile
     
-    def _calc_tile_conv2d(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
+    def _calc_tile_conv2d(self, w_dim, o_dim, dataflow):
+        pe_group_size = dataflow[0]
+        num_pe_row = dataflow[1]
+        num_pe_col = dataflow[2]
 
         # kernel size, kernel input channel, output channel
         k, _, cw, cout = w_dim
@@ -285,9 +309,9 @@ class Bitwave(Stripes):
         total_tile = tile_per_batch * batch_size
         return total_tile
     
-    def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_col = self.pe_array_dim['w']
+    def _calc_tile_dwconv(self, w_dim, i_dim, o_dim, dataflow):
+        pe_group_size = dataflow[0]
+        num_pe_col = dataflow[2]
 
         # kernel size, kernel input channel, output channel
         _, _, _, cin = i_dim
@@ -311,10 +335,10 @@ class Bitwave(Stripes):
         total_tile = tile_per_batch * batch_size
         return total_tile
 
-    def _calc_tile_fc(self, w_dim, o_dim):
-        pe_group_size = self.pe_dotprod_size
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
+    def _calc_tile_fc(self, w_dim, o_dim, dataflow):
+        pe_group_size = dataflow[0]
+        num_pe_row = dataflow[1]
+        num_pe_col = dataflow[2]
 
         # input channel, output channel
         cin, cout = w_dim
@@ -333,17 +357,17 @@ class Bitwave(Stripes):
     def _calc_dram_cycle(self):
         self._layer_cycle_dram = {}
         i_prec = self.pe.input_precision_p
-        w_prec_pad = self.pe.input_precision_p
         dram_bandwidth = self.dram.rw_bw * 2 # DDR
         size_sram_i = self.i_sram.size / 8
         self._read_layer_input = True
 
         for name in self.layer_name_list:
+            w_prec = self.w_prec_config[name]
             w_dim = self.weight_dim[name]
             num_dram_fetch_w, num_dram_fetch_i = self._layer_mem_refetch[name]
             cycle_layer_dram = 0
             if w_dim is not None:
-                cycle_dram_load_w = self._w_mem_required[name] * w_prec_pad / dram_bandwidth
+                cycle_dram_load_w = self._w_mem_required[name] * w_prec / dram_bandwidth
                 cycle_dram_load_w *= num_dram_fetch_w
 
                 i_mem_required = self._i_mem_required[name]
@@ -368,43 +392,26 @@ class Bitwave(Stripes):
             '''
             self._layer_cycle_dram[name] = int(cycle_layer_dram)
     
-    def _calc_residual_dram_latency(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        dram_bandwidth = self.dram.rw_bw * 2 # DDR # DDR
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-        total_cycle = math.ceil(cout * i_prec / dram_bandwidth) * oh * ow * batch_size
-        return total_cycle
-    
     def calc_compute_energy(self):
         num_pe = self.total_pe_count
         if self.cycle_compute is None:
             self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
+        compute_energy += (self.W_SCHEDULER_ENERGY_PER_ROW * 128 * num_cycle_compute)
         return compute_energy
     
     def calc_sram_rd_energy(self):
         w_sram_rd_cost = self.w_sram.r_cost
         i_sram_rd_cost = self.i_sram.r_cost
-        num_pe_row = self.pe_array_dim['h']
-        num_pe_col = self.pe_array_dim['w']
         if self.cycle_compute is None:
             self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         num_tile = self.calc_pe_array_tile()
 
-        sram_rd_energy = num_tile * (w_sram_rd_cost + i_sram_rd_cost)
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is None:
-                sram_rd_energy += self._calc_residual_sram_energy(o_dim)
-        
-        w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle_compute
-        # The activation register is accessed every tile
-        i_reg_energy = self.I_REG_ENERGY_PER_COL * num_pe_col * num_tile
-        total_energy = sram_rd_energy + w_reg_energy + i_reg_energy
+        w_sram_rd_energy = num_cycle_compute * w_sram_rd_cost
+        i_sram_rd_energy = num_tile * i_sram_rd_cost
+        total_energy = w_sram_rd_energy + i_sram_rd_energy
         return total_energy
     
     def calc_sram_wr_energy(self):
@@ -420,38 +427,8 @@ class Bitwave(Stripes):
                     total_energy += self._calc_sram_wr_energy_fc(name, w_dim, i_dim, o_dim)
         return total_energy
     
-    def calc_dram_energy(self):
-        energy = 0
-        self._read_layer_input = True
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    energy += self._calc_dram_energy_conv(name)
-                else:
-                    energy += self._calc_dram_energy_fc(name)
-            '''
-            else:
-                energy += self._calc_residual_dram_energy(o_dim)
-            '''
-        return energy
-    
-    def _calc_residual_sram_energy(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        i_sram_rd_cost = self.i_sram.r_cost
-        i_sram_wr_cost = self.i_sram.w_cost_min
-        i_sram_min_wr_bw = self.i_sram.w_bw_min
-
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-
-        # energy_input: energy to write the residual map to SRAM, and then read out to DRAM
-        num_i_sram_rw = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size 
-        total_energy = num_i_sram_rw * (i_sram_rd_cost + i_sram_wr_cost)
-        return total_energy
-    
     def _calc_sram_wr_energy_conv(self, layer_name, w_dim, i_dim, o_dim):
-        w_prec = self.pe.input_precision_p
+        w_prec = self.w_prec_config[layer_name]
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
         i_sram_wr_cost = self.i_sram.w_cost_min
@@ -480,7 +457,7 @@ class Bitwave(Stripes):
         return total_energy
     
     def _calc_sram_wr_energy_fc(self, layer_name, w_dim, i_dim, o_dim):
-        w_prec = self.pe.input_precision_p
+        w_prec = self.w_prec_config[layer_name]
         i_prec = self.pe.input_precision_p
         w_sram_wr_cost = self.w_sram.w_cost_min
         i_sram_wr_cost = self.i_sram.w_cost_min
@@ -510,10 +487,26 @@ class Bitwave(Stripes):
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
         return total_energy
+    
+    def calc_dram_energy(self):
+        energy = 0
+        self._read_layer_input = True
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    energy += self._calc_dram_energy_conv(name)
+                else:
+                    energy += self._calc_dram_energy_fc(name)
+            '''
+            else:
+                energy += self._calc_residual_dram_energy(o_dim)
+            '''
+        return energy
 
     def _calc_dram_energy_conv(self, layer_name):
+        w_prec = self.w_prec_config[layer_name]
         i_prec = self.pe.input_precision_p
-        w_prec = self.pe.input_precision_p
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost
@@ -545,22 +538,8 @@ class Bitwave(Stripes):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
-    def _calc_residual_dram_energy(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        bus_width = self.dram.rw_bw
-        rd_cost = self.dram.r_cost
-
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-
-        # energy_input: energy to read the residual map
-        energy_input = math.ceil(cout * i_prec / bus_width) * oh * ow * batch_size * rd_cost
-
-        total_energy = energy_input
-        return total_energy
-    
     def _calc_dram_energy_fc(self, layer_name):
-        w_prec = self.pe.input_precision_s
+        w_prec = self.w_prec_config[layer_name]
         i_prec = self.pe.input_precision_p
         size_sram_i = self.i_sram.size / 8
         bus_width = self.dram.rw_bw
@@ -602,9 +581,9 @@ class Bitwave(Stripes):
         self._w_mem_required = {}
         self._i_mem_required = {}
         self._o_mem_required = {}   
-        w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         for layer_idx, name in enumerate(self.layer_name_list):
+            w_prec = self.w_prec_config[name]
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
@@ -617,7 +596,7 @@ class Bitwave(Stripes):
                     # batch size, output feature height, output feature width, output channel
                     _, oh ,ow, _ = o_dim
                     
-                    self._w_mem_required[name] = math.ceil(cw * w_prec / 8) * k**2 * cout
+                    self._w_mem_required[name] = math.ceil(cw / 8) * w_prec * k**2 * cout
                     self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
                     self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
                 else:
@@ -626,7 +605,7 @@ class Bitwave(Stripes):
                     # batch size, sample size, output channel
                     batch_size, sample_size, _ = o_dim
 
-                    self._w_mem_required[name] = math.ceil(cin * i_prec / 8) * cout * batch_size
+                    self._w_mem_required[name] = math.ceil(cin / 8) * w_prec * cout * batch_size
                     self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * sample_size
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
@@ -674,3 +653,53 @@ class Bitwave(Stripes):
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
                 return wqb_twosComplement
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
+    
+    def _init_mem(self):
+        w_sram_bank = 16 # one bank feeds 2 PE rows
+        w_sram_config = {
+                            'technology': 0.028,
+                            'mem_type': 'sram', 
+                            'size': 18 * 1024*8 * w_sram_bank, 
+                            'bank_count': w_sram_bank, 
+                            'rw_bw': 64 * w_sram_bank, 
+                            'r_port': 1, 
+                            'w_port': 1, 
+                            'rw_port': 0,
+                        }
+        self.w_sram = MemoryInstance('w_sram', w_sram_config, 
+                                     r_cost=0, w_cost=0, latency=1, area=0, 
+                                     min_r_granularity=None, 
+                                     min_w_granularity=64, 
+                                     get_cost_from_cacti=True, double_buffering_support=False)
+        
+        i_sram_bank = 16 # one bank feeds 1 PE columns
+        i_sram_config = {
+                            'technology': 0.028,
+                            'mem_type': 'sram', 
+                            'size': 16 * 1024*8 * i_sram_bank, 
+                            'bank_count': i_sram_bank, 
+                            'rw_bw': 64 * i_sram_bank,
+                            'r_port': 1, 
+                            'w_port': 1, 
+                            'rw_port': 0,
+                        }
+        self.i_sram = MemoryInstance('i_sram', i_sram_config, 
+                                     r_cost=0, w_cost=0, latency=1, area=0, 
+                                     min_r_granularity=64, 
+                                     min_w_granularity=64, 
+                                     get_cost_from_cacti=True, double_buffering_support=False)
+        
+        dram_config = {
+                        'technology': 0.028,
+                        'mem_type': 'dram', 
+                        'size': 1e9 * 8, 
+                        'bank_count': 1, 
+                        'rw_bw': 64,
+                        'r_port': 0, 
+                        'w_port': 0, 
+                        'rw_port': 1,
+                    }
+        self.dram = MemoryInstance('dram', dram_config, 
+                                    r_cost=1000, w_cost=1000, latency=1, area=0, 
+                                    min_r_granularity=64, min_w_granularity=64, 
+                                    get_cost_from_cacti=False, double_buffering_support=False)

@@ -33,6 +33,10 @@ class Stripes(Accelerator):
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, pe_array_dim, model_name, model)
+        self._init_mem()
+        self._check_layer_mem_size()
+        self._calc_num_mem_refetch()
+
         self.cycle_compute = None
     
     def calc_cycle(self):
@@ -43,7 +47,6 @@ class Stripes(Accelerator):
         for name in self.layer_name_list:
             cycle_layer_compute = self._layer_cycle_compute[name]
             cycle_layer_dram    = self._layer_cycle_dram[name]
-            print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
         self.cycle_compute = total_cycle_compute
@@ -197,19 +200,7 @@ class Stripes(Accelerator):
                     self._read_layer_input = True
                 
                 cycle_layer_dram = cycle_dram_load_w + cycle_dram_write_o + cycle_dram_load_i
-            '''
-            else:
-                cycle_layer_dram = self._calc_residual_dram_latency(o_dim)
-            '''
             self._layer_cycle_dram[name] = int(cycle_layer_dram)
-    
-    def _calc_residual_dram_latency(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        dram_bandwidth = self.dram.rw_bw * 2 # DDR # DDR
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-        total_cycle = math.ceil(cout * i_prec / dram_bandwidth) * oh * ow * batch_size
-        return total_cycle
     
     def calc_compute_energy(self):
         num_pe = self.total_pe_count
@@ -230,11 +221,6 @@ class Stripes(Accelerator):
         num_tile = self.calc_pe_array_tile()
 
         sram_rd_energy = num_tile * (w_sram_rd_cost + i_sram_rd_cost)
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            o_dim = self.output_dim[name]
-            if w_dim is None:
-                sram_rd_energy += self._calc_residual_sram_energy(o_dim)
         
         w_reg_energy = self.W_REG_ENERGY_PER_ROW * num_pe_row * num_cycle_compute
         # The activation register is accessed every tile
@@ -253,36 +239,6 @@ class Stripes(Accelerator):
                     total_energy += self._calc_sram_wr_energy_conv(name, w_dim, i_dim, o_dim)
                 else:
                     total_energy += self._calc_sram_wr_energy_fc(name, w_dim, i_dim, o_dim)
-        return total_energy
-    
-    def calc_dram_energy(self):
-        energy = 0
-        self._read_layer_input = True
-        for name in self.layer_name_list:
-            w_dim = self.weight_dim[name]
-            if w_dim is not None:
-                if len(w_dim) == 4:
-                    energy += self._calc_dram_energy_conv(name)
-                else:
-                    energy += self._calc_dram_energy_fc(name)
-            '''
-            else:
-                energy += self._calc_residual_dram_energy(o_dim)
-            '''
-        return energy
-    
-    def _calc_residual_sram_energy(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        i_sram_rd_cost = self.i_sram.r_cost
-        i_sram_wr_cost = self.i_sram.w_cost_min
-        i_sram_min_wr_bw = self.i_sram.w_bw_min
-
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-
-        # energy_input: energy to write the residual map to SRAM, and then read out to DRAM
-        num_i_sram_rw = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size 
-        total_energy = num_i_sram_rw * (i_sram_rd_cost + i_sram_wr_cost)
         return total_energy
     
     def _calc_sram_wr_energy_conv(self, layer_name, w_dim, i_dim, o_dim):
@@ -345,10 +301,22 @@ class Stripes(Accelerator):
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
         return total_energy
+    
+    def calc_dram_energy(self):
+        energy = 0
+        self._read_layer_input = True
+        for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            if w_dim is not None:
+                if len(w_dim) == 4:
+                    energy += self._calc_dram_energy_conv(name)
+                else:
+                    energy += self._calc_dram_energy_fc(name)
+        return energy
 
     def _calc_dram_energy_conv(self, layer_name):
-        i_prec = self.pe.input_precision_p
         w_prec = self.pe.input_precision_p
+        i_prec = self.pe.input_precision_p
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost
@@ -380,22 +348,8 @@ class Stripes(Accelerator):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
-    def _calc_residual_dram_energy(self, o_dim):
-        i_prec = self.pe.input_precision_p
-        bus_width = self.dram.rw_bw
-        rd_cost = self.dram.r_cost
-
-        # batch size, output feature height, output feature width, output channel
-        batch_size, oh ,ow, cout = o_dim
-
-        # energy_input: energy to read the residual map
-        energy_input = math.ceil(cout * i_prec / bus_width) * oh * ow * batch_size * rd_cost
-
-        total_energy = energy_input
-        return total_energy
-    
     def _calc_dram_energy_fc(self, layer_name):
-        w_prec = self.pe.input_precision_s
+        w_prec = self.pe.input_precision_p
         i_prec = self.pe.input_precision_p
         size_sram_i = self.i_sram.size / 8
         bus_width = self.dram.rw_bw
@@ -461,7 +415,7 @@ class Stripes(Accelerator):
                     # batch size, sample size, output channel
                     batch_size, sample_size, _ = o_dim
 
-                    self._w_mem_required[name] = math.ceil(cin * i_prec / 8) * cout * batch_size
+                    self._w_mem_required[name] = math.ceil(cin * w_prec / 8) * cout * batch_size
                     self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * sample_size
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0

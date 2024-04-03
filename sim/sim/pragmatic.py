@@ -39,7 +39,6 @@ class Pragmatic(Stripes):
         for name in self.layer_name_list:
             cycle_layer_compute = self._layer_cycle_compute[name]
             cycle_layer_dram    = self._layer_cycle_dram[name]
-            print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
         self.cycle_compute = total_cycle_compute

@@ -9,13 +9,14 @@ model = model()
 if __name__ == "__main__":
     acc = Pragmatic(8, 8, 16, [16, 16], name, model)
     
+    total_cycle    = acc.calc_cycle()
     compute_energy = acc.calc_compute_energy() / 1e6
     sram_rd_energy = acc.calc_sram_rd_energy() / 1e6
     sram_wr_energy = acc.calc_sram_wr_energy() / 1e6
     dram_energy    = acc.calc_dram_energy() / 1e6
     total_energy   = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
     
-    print(f'total cycle:        {acc.calc_cycle()}')
+    print(f'total cycle:        {total_cycle}')
     print(f'weight buffer area: {acc.w_sram.area} mm2')
     print(f'input buffer area:  {acc.i_sram.area} mm2')
     print(f'compute energy:     {compute_energy} uJ')
