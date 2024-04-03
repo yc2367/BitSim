@@ -86,7 +86,4 @@ class DIM(Profiler):
                 self.layer_name_list.append(n)
             else:
                 print(f"{type(m)} will be ignored for dim calculation")
-            '''
-
-
-    
+            ''' 

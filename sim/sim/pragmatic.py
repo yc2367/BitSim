@@ -6,7 +6,7 @@ from typing import List
 from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
 
-from sim.util.bin_int_convert import int_to_twosComplement
+from sim.util.bin_int_convert import int_to_signMagnitude
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
@@ -32,6 +32,8 @@ class Pragmatic(Stripes):
                          pe_array_dim, model_name, model)
     
     def calc_cycle(self):
+        self._calc_compute_cycle()
+        self._calc_dram_cycle() 
         total_cycle = 0
         total_cycle_compute = 0
         for name in self.layer_name_list:
@@ -40,6 +42,7 @@ class Pragmatic(Stripes):
             print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
+        self.cycle_compute = total_cycle_compute
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
@@ -68,7 +71,7 @@ class Pragmatic(Stripes):
     def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :, :, :]
+        wq_b = wq_b[:, :, :, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
@@ -112,7 +115,6 @@ class Pragmatic(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-
                             cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
                             cycle_kernel += int(cycle_tile_cw.item())
         cycle_ow = math.ceil(ow / num_pe_col)
@@ -125,7 +127,7 @@ class Pragmatic(Stripes):
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :, :, :]
+        wq_b = wq_b[:, :, :, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_col = self.pe_array_dim['w']
@@ -170,7 +172,7 @@ class Pragmatic(Stripes):
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :]
+        wq_b = wq_b[:, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
@@ -210,14 +212,16 @@ class Pragmatic(Stripes):
             if ( layer_name == name ):
                 w = layer.weight()
                 wq = torch.int_repr(w)
-                wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
+                wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
                 return wqb_twosComplement
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
         
     def calc_compute_energy(self):
-        num_pe = self.pe_array.total_unit_count
+        num_pe = self.total_pe_count
+        if self.cycle_compute is None:
+            self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy

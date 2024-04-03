@@ -275,7 +275,7 @@ class CactiConfig:
 
         self.config_options['line_size'] = {'string': '-block size (bytes) ',
                                             'option': [8, 16, 24, 32, 64],
-                                            'default': 32}
+                                            'default': 64}
 
         # Unit for IO_bus_width is bit.
         self.config_options['IO_bus_width'] = {'string': '# Wordwidth (bit)\n' + '-output/input bus width ',

@@ -83,7 +83,7 @@ class SpartenProfiler(Profiler):
         file_num_zero_input  = save_dir + f'/{model_name}_num_zero_input.pickle'
         file_num_zero_output = save_dir + f'/{model_name}_num_zero_output.pickle'
         file_num_zero_weight = save_dir + f'/{model_name}_file_num_zero_weight.pickle'
-        file_num_eff_ops    = save_dir + f'/{model_name}_file_num_eff_ops.pickle'
+        file_num_eff_ops     = save_dir + f'/{model_name}_file_num_eff_ops.pickle'
         dict_exists = os.path.isfile(file_num_zero_input) and \
                         os.path.isfile(file_num_zero_output) and \
                         os.path.isfile(file_num_zero_weight) and \

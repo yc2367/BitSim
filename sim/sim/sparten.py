@@ -26,7 +26,6 @@ class Sparten(Accelerator):
         assert len(pe_array_dim) == 2, \
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
         self.input_precision = input_precision
-        self.pe_array_dim = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
         self.pe_dotprod_size = pe_dotprod_size
         (self.i_num_zero, 
          self.o_num_zero, 
@@ -35,11 +34,14 @@ class Sparten(Accelerator):
         
         pe = PE([input_precision, input_precision], 
                 pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
-        super().__init__(pe, self.pe_array_dim, model_name, model)
+        super().__init__(pe, pe_array_dim, model_name, model)
 
-        self.cycle_compute, self.cycle_total = self.calc_cycle()
+        self.cycle_compute = None
     
     def calc_cycle(self):
+        self._calc_compute_cycle()
+        self._calc_dram_cycle()
+        
         total_cycle = 0
         total_cycle_compute = 0
         for name in self.layer_name_list:
@@ -47,6 +49,7 @@ class Sparten(Accelerator):
             cycle_layer_dram    = self._layer_cycle_dram[name]
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
+        self.cycle_compute = total_cycle_compute
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
@@ -276,13 +279,17 @@ class Sparten(Accelerator):
         return total_tile
 
     def calc_compute_energy(self):
-        num_pe = self.pe_array.total_unit_count
+        num_pe = self.total_pe_count
+        if self.cycle_compute is None:
+            self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy
     
     def calc_local_buffer_rd_energy(self):
         buffer_rd_cost = self.local_buffer.r_cost
+        if self.cycle_compute is None:
+            self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         total_energy = buffer_rd_cost * num_cycle_compute
         return total_energy

@@ -14,7 +14,7 @@ parser.add_argument('--workers', type=int, default=4,help='number of data loadin
 parser.add_argument('--sparten_save_dir', type=str, default='./data/', help='sparten profiling save directory')
 
 args = parser.parse_args()
-name_list = ['resnet50', 'mobilenet_v2']
+name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
 name = args.model
 model = MODEL[name]
 model = model(weights='DEFAULT')

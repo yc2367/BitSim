@@ -1,13 +1,13 @@
-from sim.bitlet import Bitlet 
+from sim.bitwave import Bitwave
 from model_profile.models.models import MODEL
 
 name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
-name = name_list[2]
+name = name_list[0]
 model = MODEL[name]
 model = model()
 
 if __name__ == "__main__":
-    acc = Bitlet(8, 8, 32, [32, 16], name, model)
+    acc = Bitwave(8, 8, 8, [64, 8], name, model, layer_prec={}, en_bitflip=True)
     
     compute_energy = acc.calc_compute_energy() / 1e6
     sram_rd_energy = acc.calc_sram_rd_energy() / 1e6

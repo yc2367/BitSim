@@ -10,7 +10,7 @@ from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_twosComplement
 
-# Pragmatic accelerator
+# Bitlet accelerator
 class Bitlet(Stripes):
     PR_SCALING = 1.3 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625
@@ -33,6 +33,8 @@ class Bitlet(Stripes):
                          pe_array_dim, model_name, model)
     
     def calc_cycle(self):
+        self._calc_compute_cycle()
+        self._calc_dram_cycle()
         total_cycle = 0
         total_cycle_compute = 0
         for name in self.layer_name_list:
@@ -41,6 +43,7 @@ class Bitlet(Stripes):
             print(cycle_layer_compute, cycle_layer_dram)
             total_cycle_compute += cycle_layer_compute
             total_cycle += max(cycle_layer_compute, cycle_layer_dram)
+        self.cycle_compute = total_cycle_compute
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
@@ -213,7 +216,9 @@ class Bitlet(Stripes):
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
         
     def calc_compute_energy(self):
-        num_pe = self.pe_array.total_unit_count
+        num_pe = self.total_pe_count
+        if self.cycle_compute is None:
+            self.cycle_compute, _ = self.calc_cycle()
         num_cycle_compute = self.cycle_compute
         compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy
