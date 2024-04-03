@@ -82,7 +82,7 @@ module mac_unit_Vert_16
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic signed   [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
+	input  logic          [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
@@ -208,7 +208,7 @@ module mac_unit_Vert_16_clk
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic signed   [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
+	input  logic          [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier

@@ -3,8 +3,8 @@ set workdir /home/yc2367/Research/BitSim/hardware
 set_app_var target_library "$tsmc28/tcbn28hpcplusbwp30p140ssg0p9vm40c.db"
 set_app_var link_library   "* $target_library"
 
-set run_module 1 ;
-set bit_func   1 ;
+set run_module 0 ;
+set bit_func   0 ;
 set group_size 16 ;
 
 set add_load 1 ;
