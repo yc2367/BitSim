@@ -5,13 +5,13 @@ set_app_var link_library   "* $target_library"
 
 set run_module 0 ;
 set bit_func   0 ;
-set group_size 16 ;
+set group_size 32 ;
 
 set add_load 1 ;
 
 if {$run_module == 1} {
-    analyze -format sverilog $workdir/scheduler_bitwave.v
-    elaborate scheduler_bitwave
+    analyze -format sverilog $workdir/scheduler_bitvert.v
+    elaborate scheduler_bitvert
     if {$add_load == 1} {
         set_load 0.02 [all_outputs]
     }
@@ -21,8 +21,8 @@ if {$run_module == 1} {
             analyze -format sverilog $workdir/mac_unit_Vert_16.v
             elaborate mac_unit_Vert_16_clk
         } else {
-            analyze -format sverilog $workdir/mac_unit_Vert_8.v
-            elaborate mac_unit_Vert_8_clk
+            analyze -format sverilog $workdir/mac_unit_Vert_32_no_mul.v
+            elaborate mac_unit_Vert_32_no_mul_clk
         }
     } elseif {$bit_func == 1} {
         if {$group_size == 16} {
