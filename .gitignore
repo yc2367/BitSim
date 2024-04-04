@@ -3,7 +3,8 @@ __pycache__/
 software/*.txt
 software/plot/*
 
-
+hardware/simv.daidir/*
+hardware/csrc/*
 hardware/*.log
 hardware/*.txt
 hardware/work/*
