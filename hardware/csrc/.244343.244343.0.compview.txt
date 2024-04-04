@@ -1,8 +1,0 @@
-{"vcs1":{"timestamp_begin":1712263996.213909530, "rt":0.74, "ut":0.41, "st":0.05}}
-{"vcselab":{"timestamp_begin":1712263996.995983110, "rt":0.43, "ut":0.15, "st":0.04}}
-{"SNPS_VCS_INTERNAL_ROOT_START_TIME": 1712263996.034156200}
-{"VCS_COMP_START_TIME": 1712263996.034156200}
-{"VCS_COMP_END_TIME": 1712263997.444033443}
-{"VCS_USER_OPTIONS": "-sverilog vert_32_tb.v +vcs+dumpvars+test.vcd"}
-{"vcs1": {"peak_mem": 249164}}
-{"vcselab": {"peak_mem": 148204}}
