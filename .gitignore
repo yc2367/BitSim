@@ -5,11 +5,11 @@ software/plot/*
 
 hardware/simv.daidir/*
 hardware/csrc/*
+hardware/*.tcl
 hardware/*.log
 hardware/*.txt
 hardware/work/*
 hardware/tmp/*
-hardware/run.tcl
 save/*
 *.pth.tar
 *.log
