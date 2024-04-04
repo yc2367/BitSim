@@ -171,28 +171,42 @@ module mac_unit_Wave_16_clk
 	input  logic                             en,
 	input  logic                             load_accum,
 
-	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
-	input  logic                             sign     [VEC_LENGTH-1:0],
-	input  logic                             w_bit    [VEC_LENGTH-1:0],
-	input  logic        [2:0]                column_idx,
+	input  logic                             sign_in  [VEC_LENGTH-1:0],
+	input  logic                             w_b      [VEC_LENGTH-1:0],
+	input  logic        [2:0]                column_idx_in,
 	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
 );
 	genvar j;
-
+	
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
+	logic                          sign   [VEC_LENGTH-1:0];
+	logic                          w_bit  [VEC_LENGTH-1:0];
+	logic        [2:0]             column_idx;
 	generate
 	for (j=0; j<VEC_LENGTH; j=j+1) begin
 		always @(posedge clk) begin
 			if (reset) begin
 				act_in[j] <= 0;
+				sign[j] <= 0;
+				w_bit[j] <= 0;
 			end else begin
 				act_in[j] <= act[j];
+				sign[j]   <= sign_in[j];
+				w_bit[j]  <= w_b[j];
 			end
 		end
 	end
 	endgenerate
+
+	always @(posedge clk) begin
+		if (reset) begin
+			column_idx <= 0;
+		end else begin
+			column_idx <= column_idx_in;
+		end
+	end
 
 	mac_unit_Wave_16 #(DATA_WIDTH, VEC_LENGTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
