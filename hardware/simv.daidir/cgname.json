@@ -1,0 +1,44 @@
+{
+    "std": [
+        "std",
+        "reYIK",
+        "module",
+        1
+    ],
+    "mux_5to1": [
+        "mux_5to1",
+        "SgnjE",
+        "module",
+        2
+    ],
+    "shifter_constant": [
+        "shifter_constant",
+        "DdtRZ",
+        "module",
+        3
+    ],
+    "mac_unit_Vert_32_no_mul_0000": [
+        "mac_unit_Vert_32_no_mul_0000",
+        "WbhcR",
+        "module",
+        4
+    ],
+    "mac_unit_Vert_32_no_mul_clk_0000": [
+        "mac_unit_Vert_32_no_mul_clk_0000",
+        "J0QQx",
+        "module",
+        5
+    ],
+    "vert_32_tb": [
+        "vert_32_tb",
+        "QPCmW",
+        "module",
+        6
+    ],
+    "...MASTER...": [
+        "SIM",
+        "amcQw",
+        "module",
+        7
+    ]
+}
