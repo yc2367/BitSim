@@ -154,10 +154,10 @@ module mac_unit_Stripes_8_clk
 	input  logic                             load_accum,
 	
 	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
-	input  logic                             w_bit    [VEC_LENGTH-1:0],
+	input  logic                             wb       [VEC_LENGTH-1:0],
 
-	input  logic        [2:0]                column_idx,    // current column index for shifting 
-	input  logic                             is_msb,
+	input  logic        [2:0]                column_idx_in,    // current column index for shifting 
+	input  logic                             is_msb_in,
 	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 
 	output logic signed [RESULT_WIDTH-1:0]   result
@@ -165,17 +165,34 @@ module mac_unit_Stripes_8_clk
 	genvar j;
 	
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
+	logic                          w_bit  [VEC_LENGTH-1:0];
+
+	logic        [2:0]             column_idx;    // current column index for shifting 
+	logic                          is_msb;
+
 	generate
 	for (j=0; j<VEC_LENGTH; j=j+1) begin
 		always @(posedge clk) begin
 			if (reset) begin
 				act_in[j] <= 0;
+				w_bit[j]  <= 0;
 			end else begin
 				act_in[j] <= act[j];
+				w_bit[j]  <= wb[j];
 			end
 		end
 	end
 	endgenerate
+
+	always @(posedge clk) begin
+		if (reset) begin
+			column_idx <= 0;
+			is_msb <= 0;
+		end else begin
+			column_idx <= column_idx_in;
+			is_msb <= is_msb_in;
+		end
+	end
 
 	mac_unit_Stripes_8 #(DATA_WIDTH, VEC_LENGTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule

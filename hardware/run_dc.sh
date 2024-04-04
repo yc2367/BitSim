@@ -1,5 +1,5 @@
 mkdir work
-dc_shell -f run.tcl &&
+dc_shell -f run_dc.tcl &&
 
 rm *.syn
 rm *.svf

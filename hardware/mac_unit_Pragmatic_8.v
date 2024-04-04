@@ -179,12 +179,12 @@ module mac_unit_Pragmatic_8_clk
 	input  logic                             en,
 	input  logic                             load_accum,
 
-	input  logic signed [DATA_WIDTH-1:0]     act            [VEC_LENGTH-1:0], 
-	input  logic        [1:0]                shift_1st_sel  [VEC_LENGTH-1:0],
-	input  logic                             shift_1st_en   [VEC_LENGTH-1:0],
-	input  logic        [2:0]                shift_2nd_sel, // 2nd-stage shifter
-	input  logic                             shift_2nd_en,  // whether enable 2nd-stage shifter
-	input  logic                             is_neg         [VEC_LENGTH-1:0],
+	input  logic signed [DATA_WIDTH-1:0]     act               [VEC_LENGTH-1:0], 
+	input  logic        [1:0]                shift_1st_sel_in  [VEC_LENGTH-1:0],
+	input  logic                             shift_1st_en_in   [VEC_LENGTH-1:0],
+	input  logic        [2:0]                shift_2nd_sel_in, // 2nd-stage shifter
+	input  logic                             shift_2nd_en_in,  // whether enable 2nd-stage shifter
+	input  logic                             is_neg_in         [VEC_LENGTH-1:0],
 
 	input  logic signed [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed [RESULT_WIDTH-1:0]   result
@@ -192,17 +192,39 @@ module mac_unit_Pragmatic_8_clk
 	genvar j;
 	
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
+
+	logic        [1:0]                shift_1st_sel  [VEC_LENGTH-1:0];
+	logic                             shift_1st_en   [VEC_LENGTH-1:0];
+	logic        [2:0]                shift_2nd_sel; // 2nd-stage shifter
+	logic                             shift_2nd_en;  // whether enable 2nd-stage shifter
+	logic                             is_neg         [VEC_LENGTH-1:0];
 	generate
-	for (j=0; j<VEC_LENGTH; j=j+1) begin
-		always @(posedge clk) begin
-			if (reset) begin
-				act_in[j] <= 0;
-			end else begin
-				act_in[j] <= act[j];
+		for (j=0; j<VEC_LENGTH; j=j+1) begin
+			always @(posedge clk) begin
+				if (reset) begin
+					act_in[j] <= 0;
+					shift_1st_sel[j] <= 0;
+					shift_1st_en[j] <= 0;
+					is_neg[j] <= 0;
+				end else begin
+					act_in[j] <= act[j];
+					shift_1st_sel[j] <= shift_1st_sel_in[j];
+					shift_1st_en[j] <= shift_1st_en_in[j];
+					is_neg[j] <= is_neg_in[j];
+				end
 			end
 		end
-	end
 	endgenerate
+
+	always @(posedge clk) begin
+		if (reset) begin
+			shift_2nd_sel <= 0;
+			shift_2nd_en <= 0;
+		end else begin
+			shift_2nd_sel <= shift_2nd_sel_in;
+			shift_2nd_en <= shift_2nd_en_in;
+		end
+	end
 
 	mac_unit_Pragmatic_8 #(DATA_WIDTH, VEC_LENGTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule

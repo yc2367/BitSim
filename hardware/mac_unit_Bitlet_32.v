@@ -124,9 +124,9 @@ module mac_unit_Bitlet_32_clk
 	// act_in:  activation
 	// act_sel: activation MUX select signal
 	// act_val: whether activation is valid
-	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
-	input  logic        [MUX_SEL_WIDTH-1:0]  act_sel  [DATA_WIDTH-1:0], 
-	input  logic                             act_val  [DATA_WIDTH-1:0], 
+	input  logic signed [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0], 
+	input  logic        [MUX_SEL_WIDTH-1:0]  act_sel_in  [DATA_WIDTH-1:0], 
+	input  logic                             act_val_in  [DATA_WIDTH-1:0], 
 
 	input  logic signed [ACC_WIDTH-1:0]      accum_prev, // previous accumulator partial sum
 
@@ -134,14 +134,20 @@ module mac_unit_Bitlet_32_clk
 );
 	genvar j;
 	
-	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
+	logic signed [DATA_WIDTH-1:0]     act_in [VEC_LENGTH-1:0];
+	logic        [MUX_SEL_WIDTH-1:0]  act_sel  [DATA_WIDTH-1:0];
+	logic                             act_val  [DATA_WIDTH-1:0]; 
 	generate
 	for (j=0; j<VEC_LENGTH; j=j+1) begin
 		always @(posedge clk) begin
 			if (reset) begin
 				act_in[j] <= 0;
+				act_sel[j] <= 0;
+				act_val[j] <= 0;
 			end else begin
 				act_in[j] <= act[j];
+				act_sel[j] <= act_sel_in[j];
+				act_val[j] <= act_val_in[j];
 			end
 		end
 	end

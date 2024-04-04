@@ -180,11 +180,11 @@ module mac_unit_Vert_32_no_mul_clk
 	input  logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0], // input activation MUX select signal
 	input  logic                               act_val_in  [VEC_LENGTH/2-1:0], // whether activation is valid
-	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
+	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act_in  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic          [2:0]                column_idx,    // current column index for shifting 
-	input  logic                               is_msb,        // specify if the current column is MSB
-	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
+	input  logic          [2:0]                column_idx_in,    // current column index for shifting 
+	input  logic                               is_msb_in,        // specify if the current column is MSB
+	input  logic                               is_skip_zero_in [VEC_LENGTH/8-1:0],  // specify if skip bit 0
 	
 	input  logic signed   [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed   [RESULT_WIDTH-1:0]   result
@@ -194,6 +194,10 @@ module mac_unit_Vert_32_no_mul_clk
 	logic   [MUX_SEL_WIDTH-1:0]  act_sel  [VEC_LENGTH/2-1:0]; 
 	logic                        act_val  [VEC_LENGTH/2-1:0]; 
 	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0] ;
+	logic signed [SUM_ACT_WIDTH-1:0] sum_act  [VEC_LENGTH/8-1:0];
+	logic  [2:0] column_idx;    // current column index for shifting 
+	logic        is_msb;        // specify if the current column is MSB
+	logic        is_skip_zero [VEC_LENGTH/8-1:0];  // specify if skip bit 0
 	generate
 	for (j=0; j<VEC_LENGTH/2; j=j+1) begin
 		always @(posedge clk) begin
@@ -216,7 +220,29 @@ module mac_unit_Vert_32_no_mul_clk
 			end
 		end
 	end
+
+	for (j=0; j<VEC_LENGTH/8; j=j+1) begin
+		always @(posedge clk) begin
+			if (reset) begin
+				sum_act[j] <= 0;
+				is_skip_zero[j] <= 0;
+			end else begin
+				sum_act[j] <= sum_act_in[j];
+				is_skip_zero[j] <= is_skip_zero_in[j];
+			end
+		end
+	end
 	endgenerate
+	
+	always @(posedge clk) begin
+		if (reset) begin
+			column_idx <= 0;
+			is_msb <= 0;
+		end else begin
+			column_idx <= column_idx_in;
+			is_msb <= is_msb_in;
+		end
+	end
 
 	mac_unit_Vert_32_no_mul #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
