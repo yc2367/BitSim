@@ -13,7 +13,7 @@ from model_profile.meters.sparten_profiler import SpartenProfiler
 # Pragmatic accelerator
 class Sparten(Accelerator):
     LOCAL_OUTPUT_BUFFER_SIZE = 32
-    PE_ENERGY = 1.1 # energy per PE, including MAC, prefix-sum, priority encoder
+    PE_ENERGY = 1.3 # energy per PE, including MAC, prefix-sum, priority encoder
     PE_AREA = 1
 
     def __init__(self, 
@@ -35,6 +35,7 @@ class Sparten(Accelerator):
         pe = PE([input_precision, input_precision], 
                 pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
         super().__init__(pe, pe_array_dim, model_name, model)
+        self._calc_eff_ops()
 
         self._init_mem()
         self._check_layer_mem_size()
@@ -139,10 +140,10 @@ class Sparten(Accelerator):
         num_eff_ops = self.num_eff_ops[layer_name] # dimension: [sample size, cout, num_groups]
 
         # batch size, output channel, num_groups
-        sample_size, cout, num_groups = num_eff_ops.shape
+        token_num, cout, num_groups = num_eff_ops.shape
         
         iter_cout  = math.ceil(cout / num_pe_row)
-        iter_sample = math.ceil(sample_size / num_pe_col)
+        iter_sample = math.ceil(token_num / num_pe_col)
         for ti_sample in range(iter_sample):
             l_ti_sample = ti_sample * num_pe_col
             u_ti_sample = (ti_sample+1) * num_pe_col
@@ -270,31 +271,37 @@ class Sparten(Accelerator):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # tile_in_channel:   number of tiles along input channel
         # tile_cout:  number of tiles along output channel
         tile_in_channel  = math.ceil(cin / pe_group_size)
         tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size * sample_size / num_pe_col)
+        tile_batch       = math.ceil(batch_size * token_num / num_pe_col)
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
+    
+    def _calc_eff_ops(self):
+        num_eff_ops = 0
+        for name in self.layer_name_list:
+            num_eff_ops += torch.sum(self.num_eff_ops[name]).item()
+        self.total_eff_ops = num_eff_ops
 
-    def calc_compute_energy(self):
-        num_pe = self.total_pe_count
-        if self.cycle_compute is None:
-            self.cycle_compute, _ = self.calc_cycle()
-        num_cycle_compute = self.cycle_compute
-        compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
+    def calc_compute_energy(self, use_old=False):
+        if not use_old:
+            compute_energy = self.total_eff_ops * self.PE_ENERGY
+        else:
+            num_pe = self.total_pe_count
+            if self.cycle_compute is None:
+                self.cycle_compute, _ = self.calc_cycle()
+            num_cycle_compute = self.cycle_compute
+            compute_energy = self.PE_ENERGY * num_pe * num_cycle_compute
         return compute_energy
     
     def calc_local_buffer_rd_energy(self):
-        buffer_rd_cost = self.local_buffer.r_cost
-        if self.cycle_compute is None:
-            self.cycle_compute, _ = self.calc_cycle()
-        num_cycle_compute = self.cycle_compute
-        total_energy = buffer_rd_cost * num_cycle_compute
+        buffer_rd_cost = self.local_buffer.r_cost / self.total_pe_count
+        total_energy = buffer_rd_cost * self.total_eff_ops
         return total_energy
     
     def calc_local_buffer_wr_energy(self):
@@ -406,17 +413,17 @@ class Sparten(Accelerator):
         # batch size, sample size, input channel
         batch_size, _, _ = i_dim
         # batch size, sample size, output channel
-        _, sample_size, _ = o_dim
+        _, token_num, _ = o_dim
 
         # write energy, read from DRAM and write to SRAM
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * token_num
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
-        if sample_size == 1: # CNN last FC layer
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        if token_num == 1: # CNN last FC layer
             energy_o_sram_wr = 0
         else:
             energy_o_sram_wr = num_o_sram_wr * o_density * i_sram_wr_cost
@@ -437,8 +444,6 @@ class Sparten(Accelerator):
         return energy
     
     def _calc_dram_energy_conv(self, layer_name):
-        w_prec = self.input_precision
-        i_prec = self.input_precision
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
         wr_cost = self.dram.w_cost
@@ -449,11 +454,11 @@ class Sparten(Accelerator):
         # energy_output: energy to write output feature map
         # energy_weight: energy to read weight
         w_mem_required = self._w_mem_required[layer_name]
-        energy_weight = w_mem_required * w_prec / bus_width * rd_cost
+        energy_weight = w_mem_required * 8 / bus_width * rd_cost
 
         i_mem_required = self._i_mem_required[layer_name]
         if self._read_layer_input:
-            energy_input = i_mem_required * i_prec / bus_width * rd_cost 
+            energy_input = i_mem_required * 8 / bus_width * rd_cost 
         else:
             energy_input = 0
 
@@ -462,7 +467,7 @@ class Sparten(Accelerator):
             energy_output = 0
             self._read_layer_input = False
         else:
-            energy_output = o_mem_required * i_prec / bus_width * wr_cost
+            energy_output = o_mem_required * 8 / bus_width * wr_cost
             self._read_layer_input = True
         
         energy_weight *= num_fetch_w
@@ -471,8 +476,6 @@ class Sparten(Accelerator):
         return total_energy
     
     def _calc_dram_energy_fc(self, layer_name):
-        w_prec = self.input_precision
-        i_prec = self.input_precision
         size_sram_i = self.i_sram.size / 8
         bus_width = self.dram.rw_bw
         rd_cost = self.dram.r_cost
@@ -481,12 +484,12 @@ class Sparten(Accelerator):
 
         # energy_weight: energy to read weight from DRAM
         w_mem_required = self._w_mem_required[layer_name]
-        energy_weight = w_mem_required * w_prec / bus_width * rd_cost
+        energy_weight = w_mem_required * 8 / bus_width * rd_cost
         
         # energy_input:  energy to read input feature map from DRAM
         i_mem_required = self._i_mem_required[layer_name]
         if self._read_layer_input:
-            energy_input  = i_mem_required * i_prec / bus_width * rd_cost
+            energy_input  = i_mem_required * 8 / bus_width * rd_cost
         else:
             energy_input = 0
 
@@ -501,7 +504,7 @@ class Sparten(Accelerator):
                 energy_output = 0
                 self._read_layer_input = True
             else:
-                energy_output = o_mem_required * i_prec / bus_width * wr_cost
+                energy_output = o_mem_required * 8 / bus_width * wr_cost
                 self._read_layer_input = True
 
         energy_weight *= num_fetch_w
@@ -542,7 +545,6 @@ class Sparten(Accelerator):
             i_density   = 1 - (i_num_zero / i_num_total)
             o_density   = 1 - (o_num_zero / o_num_total)
             
-            print(w_density, i_density, o_density)
             if w_dim is not None:
                 if len(w_dim) == 4:
                     # kernel size, kernel input channel, output channel
@@ -562,14 +564,14 @@ class Sparten(Accelerator):
                     # input channel, output channel
                     cin, cout = w_dim
                     # batch size, output channel
-                    batch_size, sample_size, _ = o_dim
+                    batch_size, token_num, _ = o_dim
 
-                    w_mem_dense = math.ceil(cin * w_prec / 8) * cout * batch_size
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size * sample_size
+                    w_mem_dense = math.ceil(cin * w_prec / 8) * cout
+                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         o_mem_dense = 0
                     else:
-                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size * sample_size
+                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size * token_num
                     self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8

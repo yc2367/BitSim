@@ -12,13 +12,13 @@ from sim.util.bin_int_convert import int_to_twosComplement
 
 # Bitlet accelerator
 class Bitlet(Stripes):
-    PR_SCALING = 1.3 # scaling factor to account for post placement and routing
+    PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625
     #PE_ENERGY = 0.32 * PR_SCALING # energy per PE
     PE_ENERGY = 0.355 * PR_SCALING # energy per PE
     W_REG_ENERGY_PER_ROW = 1.1325 * PR_SCALING # energy (pJ) of the weight shift register file for a PE row
     #W_REG_ENERGY_PER_ROW = 0.61875 * PR_SCALING
-    I_REG_ENERGY_PER_COL = (0.2625 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column
+    I_REG_ENERGY_PER_COL = (1.054 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column
     PE_AREA = 1
 
     def __init__(self, 
@@ -178,7 +178,7 @@ class Bitlet(Stripes):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -199,7 +199,7 @@ class Bitlet(Stripes):
 
                 cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))
                 cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
+        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
     
@@ -224,13 +224,13 @@ class Bitlet(Stripes):
     
     def _init_mem(self):
         w_prec = self.pe.input_precision_p
-        w_sram_bank = 32 # one bank feeds 2 PE rows
+        w_sram_bank = self.pe_array_dim['h'] # one bank feeds 1 PE row
         w_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 9 * 1024*8 * w_sram_bank, 
+                            'size': 288 * 1024*8, 
                             'bank_count': w_sram_bank, 
-                            'rw_bw': (self.pe_array_dim['h'] * w_prec) * 16, 
+                            'rw_bw': (self.pe_dotprod_size * w_prec) * w_sram_bank, 
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,
@@ -241,13 +241,13 @@ class Bitlet(Stripes):
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
         i_prec = self.pe.input_precision_p
-        i_sram_bank = 32 # one bank feeds 1 PE columns
+        i_sram_bank = self.pe_array_dim['w'] # one bank feeds 1 PE column
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 8 * 1024*8 * i_sram_bank, 
+                            'size': 256 * 1024*8, 
                             'bank_count': i_sram_bank, 
-                            'rw_bw': (self.pe_array_dim['w'] * i_prec) * i_sram_bank,
+                            'rw_bw': (self.pe_dotprod_size * i_prec) * i_sram_bank,
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,

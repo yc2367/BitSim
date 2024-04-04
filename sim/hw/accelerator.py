@@ -1,5 +1,6 @@
 from typing import List
 import numpy as np
+import math
 import torch
 import torch.nn as nn
 
@@ -35,16 +36,4 @@ class Accelerator:
         self.layer_name_list = dim_profiler.layer_name_list
     
     def _init_mem(self):
-        raise NotImplementedError
-    
-    def _check_layer_mem_size(self):
-        raise NotImplementedError
-    
-    def _calc_num_mem_refetch(self):
-        raise NotImplementedError
-
-
-
-    
-    
-    
+        raise NotImplementedError('ERROR! No implementation of function _init_mem()')

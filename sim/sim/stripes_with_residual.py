@@ -157,13 +157,13 @@ class Stripes(Accelerator):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # tile_in_channel:   number of tiles along input channel
         # tile_cout:  number of tiles along output channel
         tile_in_channel  = math.ceil(cin / pe_group_size)
         tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size * sample_size / num_pe_col)
+        tile_batch       = math.ceil(batch_size * token_num / num_pe_col)
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
@@ -331,17 +331,17 @@ class Stripes(Accelerator):
         # batch size, sample size, input channel
         batch_size, _, _ = i_dim
         # batch size, sample size, output channel
-        _, sample_size, _ = o_dim
+        _, token_num, _ = o_dim
 
         # write energy, read from DRAM and write to SRAM
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * token_num
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * sample_size
-        if sample_size == 1: # CNN last FC layer
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        if token_num == 1: # CNN last FC layer
             energy_o_sram_wr = 0
         else:
             energy_o_sram_wr = num_o_sram_wr * i_sram_wr_cost
@@ -462,14 +462,14 @@ class Stripes(Accelerator):
                     # input channel, output channel
                     cin, cout = w_dim
                     # batch size, sample size, output channel
-                    batch_size, sample_size, _ = o_dim
+                    batch_size, token_num, _ = o_dim
 
                     self._w_mem_required[name] = math.ceil(cin * w_prec / 8) * cout * batch_size
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * sample_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
                     else:
-                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * batch_size * sample_size
+                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * batch_size * token_num
 
     def _calc_num_mem_refetch(self):
         # If the on-chip buffer size is not big enough, 

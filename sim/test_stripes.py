@@ -7,7 +7,7 @@ model = MODEL[name]
 model = model()
 
 if __name__ == "__main__":
-    acc = Stripes(8, 8, 16, [16, 16], name, model)
+    acc = Stripes(8, 8, 16, [2, 16], name, model)
 
     total_cycle    = acc.calc_cycle()
     compute_energy = acc.calc_compute_energy() / 1e6

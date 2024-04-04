@@ -5,14 +5,15 @@ import torch.nn as nn
 from typing import List
 from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
-
+from sim.util.count_sparsity import count_zero_bit_sm_conv, count_zero_bit_sm_fc
 from sim.util.bin_int_convert import int_to_signMagnitude
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
-    PR_SCALING = 1.3 # scaling factor to account for post placement and routing
+    PR_SCALING = 1.5 # scaling factor to account for post placement and routing
+    
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.46625 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
+    PE_ENERGY = 0.46625 * PR_SCALING # energy per PE
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_REG_ENERGY_PER_ROW = 0.763 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     #W_REG_ENERGY_PER_ROW = 0.38125 * PR_SCALING
@@ -29,8 +30,8 @@ class Pragmatic(Stripes):
                  model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
         self.model_q = MODEL[model_name].cpu() # quantized model
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)
-    
+                         pe_array_dim, model_name, model)    
+
     def calc_cycle(self):
         self._calc_compute_cycle()
         self._calc_dram_cycle() 
@@ -46,6 +47,8 @@ class Pragmatic(Stripes):
     
     def _calc_compute_cycle(self):
         self._layer_cycle_compute = {}
+        self.num_eff_op = 0
+        self.num_total_op = 0
         for name in self.layer_name_list:
             cycle_layer_compute = 0
             w_dim = self.weight_dim[name]
@@ -82,9 +85,12 @@ class Pragmatic(Stripes):
         batch_size, oh, ow, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
+        # num_eff_op:   number of effective operations performed
+        # num_total_op: number of total operations performed
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
             l_ti_cout = ti_cout * num_pe_row
@@ -102,8 +108,11 @@ class Pragmatic(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
-                        cycle_kernel += int(cycle_tile_k.item())
+                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=0)).item()
+                        cycle_kernel += int(cycle_tile_k)
+
+                        num_eff_op_kernel += torch.sum(tile_k).item()
+                        num_total_op_kernel += (cycle_tile_k * pe_group_size * num_pe_row)
             else:
                 iter_cw = math.ceil(cw / pe_group_size)
                 for tk1 in range(k):
@@ -114,13 +123,20 @@ class Pragmatic(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0))
-                            cycle_kernel += int(cycle_tile_cw.item())
+                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0)).item()
+                            cycle_kernel += int(cycle_tile_cw)
+
+                            num_eff_op_kernel += torch.sum(tile_cw).item()
+                            num_total_op_kernel += (cycle_tile_cw * pe_group_size * num_pe_row)
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
-
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
         total_cycle = cycle_per_batch * batch_size
+
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
+        num_total_op = num_total_op_kernel  * cycle_ow * cycle_oh * batch_size
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
         return total_cycle
     
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
@@ -141,9 +157,12 @@ class Pragmatic(Stripes):
         assert cin != cw, 'Not a depth-wise convolution!'
 
         # cycle_kernel: number of cycles to process a kernel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
+        # num_eff_op:   number of effective operations performed
+        # num_total_op: number of total operations performed
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+
         iter_cout  = math.ceil(cout)
         for ti_cout in range(iter_cout):
             # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
@@ -158,14 +177,20 @@ class Pragmatic(Stripes):
                     l_ti_k = ti_k * pe_group_size
                     u_ti_k = (ti_k+1) * pe_group_size
                     tile_k = tile_cw[:, l_ti_k:u_ti_k]
-
-                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=0))
-                    cycle_kernel += int(cycle_tile_k.item())
+                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=0)).item()
+                    cycle_kernel += int(cycle_tile_k)
+                    
+                    num_eff_op_kernel += torch.sum(tile_k).item()
+                    num_total_op_kernel += (cycle_tile_k * pe_group_size)
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
-
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
         total_cycle = cycle_per_batch * batch_size
+
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh * batch_size
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
         return total_cycle
 
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
@@ -180,12 +205,15 @@ class Pragmatic(Stripes):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
+        # num_eff_op:   number of effective operations performed
+        # num_total_op: number of total operations performed
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
             l_ti_cout = ti_cout * num_pe_row
@@ -198,12 +226,18 @@ class Pragmatic(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-                
-                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0))
-                cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
+                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0)).item()
+                cycle_kernel += int(cycle_tile_cin)
 
+                num_eff_op_kernel += torch.sum(tile_cin).item()
+                num_total_op_kernel += (cycle_tile_cin * pe_group_size)
+        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
+
+        num_eff_op = num_eff_op_kernel * cycle_batch
+        num_total_op = num_total_op_kernel * cycle_batch
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
         return total_cycle
     
     def _get_quantized_weight(self, layer_name):
