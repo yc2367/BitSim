@@ -1,3 +1,4 @@
+mkdir work
 dc_shell -f run.tcl &&
 
 rm *.syn

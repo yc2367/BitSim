@@ -177,7 +177,7 @@ module mac_unit_Vert_32_no_mul_clk
 	input  logic                               en_acc,
 	input  logic                               load_accum,
 
-	input  logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0],   // input activation (signed)
+	input  logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0],   // input activation (signed)
 	input  logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0], // input activation MUX select signal
 	input  logic                               act_val_in  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
@@ -193,6 +193,7 @@ module mac_unit_Vert_32_no_mul_clk
 	
 	logic   [MUX_SEL_WIDTH-1:0]  act_sel  [VEC_LENGTH/2-1:0]; 
 	logic                        act_val  [VEC_LENGTH/2-1:0]; 
+	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0] ;
 	generate
 	for (j=0; j<VEC_LENGTH/2; j=j+1) begin
 		always @(posedge clk) begin
@@ -202,6 +203,16 @@ module mac_unit_Vert_32_no_mul_clk
 			end else begin
 				act_sel[j] <= act_sel_in[j];
 				act_val[j] <= act_val_in[j];
+			end
+		end
+	end
+
+	for (j=0; j<VEC_LENGTH; j=j+1) begin
+		always @(posedge clk) begin
+			if (reset) begin
+				act_in[j] <= 0;
+			end else begin
+				act_in[j] <= act[j];
 			end
 		end
 	end

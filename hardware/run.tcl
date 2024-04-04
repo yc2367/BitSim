@@ -78,8 +78,13 @@ check_design
 create_clock clk -name ideal_clock1 -period 1.25
 compile
 
-write -format verilog -hierarchy -output post-synth.v
-write -format ddc     -hierarchy -output post-synth.ddc
+# Generate structural verilog netlist
+write_file -hierarchy -format verilog -output "./work/post.28nm.syn.v"
+write_parasitics -output "./work/post.28nm.spef.gz"
+
+# Generate timing constraints file
+write_sdc "./work/post.syn.28nm.sdc"
+
 report_resources -nosplit -hierarchy
 report_timing -nosplit -transition_time -nets -attributes
 report_area -nosplit -hierarchy

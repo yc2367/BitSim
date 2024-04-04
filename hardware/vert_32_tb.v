@@ -13,28 +13,33 @@ module vert_32_tb;
     parameter RESULT_WIDTH  = 2*DATA_WIDTH;
 
     logic                               clk;
-	logic                               reset;
-	logic                               en_acc;
-	logic                               load_accum;
+    logic                               reset;
+    logic                               en_acc;
+    logic                               load_accum;
 
-	logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0];   // input activation (signed)
-	logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0]; // input activation MUX select signal
-	logic                               act_val_in  [VEC_LENGTH/2-1:0]; // whether activation is valid
-	logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0]; // sum of a group of activations (signed)
+    logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0];   // input activation (signed)
+    logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0]; // input activation MUX select signal
+    logic                               act_val_in  [VEC_LENGTH/2-1:0]; // whether activation is valid
+    logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0]; // sum of a group of activations (signed)
 
-	logic          [2:0]                column_idx;    // current column index for shifting 
-	logic                               is_msb;        // specify if the current column is MSB
-	logic                               is_skip_zero [VEC_LENGTH/8-1:0];  // specify if skip bit 0
-	
-	logic signed   [ACC_WIDTH-1:0]      accum_prev;
+    logic          [2:0]                column_idx;    // current column index for shifting 
+    logic                               is_msb;        // specify if the current column is MSB
+    logic                               is_skip_zero [VEC_LENGTH/8-1:0];  // specify if skip bit 0
+    
+    logic signed   [ACC_WIDTH-1:0]      accum_prev;
     logic signed   [RESULT_WIDTH-1:0]   result;
 
-    mac_unit_Vert_32_no_mul_clk #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH) s (.*);
+    mac_unit_Vert_32_no_mul_clk #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH) dut (.*);
 
   initial
     $monitor ("out=%b", result);
 
   initial begin
+    `ifdef SIMULATE 
+      $vcdpluson;
+      $vcdplusmemon;
+    `endif
+
     #0 clk = 0; reset = 1;  en_acc = 0;
     #1.2 reset = 0; en_acc = 1; load_accum = 0; accum_prev = 0;
 
