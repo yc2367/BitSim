@@ -20,7 +20,7 @@ module vert_32_tb;
     logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0];   // input activation (signed)
     logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0]; // input activation MUX select signal
     logic                               act_val_in  [VEC_LENGTH/2-1:0]; // whether activation is valid
-    logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0]; // sum of a group of activations (signed)
+    logic signed   [SUM_ACT_WIDTH-1:0]  sum_act_in  [VEC_LENGTH/8-1:0]; // sum of a group of activations (signed)
 
     logic          [2:0]                column_idx;    // current column index for shifting 
     logic                               is_msb;        // specify if the current column is MSB
@@ -35,13 +35,9 @@ module vert_32_tb;
     $monitor ("out=%b", result);
 
   initial begin
-    `ifdef SIMULATE 
-      $vcdpluson;
-      $vcdplusmemon;
-    `endif
 
     #0 clk = 0; reset = 1;  en_acc = 0;
-    #1 reset = 0; en_acc = 1; load_accum = 0; accum_prev = 0; sum_act[1]=100; sum_act[2]=100; sum_act[3]=100; sum_act[4]=100;
+    #1 reset = 0; en_acc = 1; load_accum = 0; accum_prev = 0; sum_act_in[1]=100; sum_act_in[2]=100; sum_act_in[3]=100; sum_act_in[0]=100;
 
     #1.25 is_msb_in=1; column_idx_in=7; act[0] = 10; act[1] = 83; act[2] = -24; act[3] = 103; act[4] = 47; act[5] = -93; act[6] = -99; act[7] = -88; act[8] = 98; act[9] = 93; act[10] = 108; act[11] = -3; act[12] = 33; act[13] = 61; act[14] = -71; act[15] = -30; act[16] = 5; act[17] = -18; act[18] = 118; act[19] = 39; act[20] = 36; act[21] = 108; act[22] = 36; act[23] = 59; act[24] = -1; act[25] = 74; act[26] = 24; act[27] = -101; act[28] = 108; act[29] = -12; act[30] = -117; act[31] = -56; 
 act_sel_in[0] = 1; act_sel_in[1] = 3; act_sel_in[2] = 1; act_sel_in[3] = 3; act_sel_in[4] = 0; act_sel_in[5] = 2; act_sel_in[6] = 0; act_sel_in[7] = 0; act_sel_in[8] = 0; act_sel_in[9] = 2; act_sel_in[10] = 4; act_sel_in[11] = 0; act_sel_in[12] = 4; act_sel_in[13] = 3; act_sel_in[14] = 4; act_sel_in[15] = 4; act_val_in[0] = 0; act_val_in[1] = 1; act_val_in[2] = 0; act_val_in[3] = 0; act_val_in[4] = 1; act_val_in[5] = 0; act_val_in[6] = 0; act_val_in[7] = 0; act_val_in[8] = 1; act_val_in[9] = 1; act_val_in[10] = 1; act_val_in[11] = 1; act_val_in[12] = 1; act_val_in[13] = 1; act_val_in[14] = 0; act_val_in[15] = 1; is_skip_zero_in[0] = 0; is_skip_zero_in[1] = 0; is_skip_zero_in[2] = 1; is_skip_zero_in[3] = 1; 
@@ -402,7 +398,7 @@ act_sel_in[0] = 1; act_sel_in[1] = 4; act_sel_in[2] = 2; act_sel_in[3] = 2; act_
     #15 $stop;
   end
 
-  always #1.25 clk = ~clk;
+  always #0.625 clk = ~clk;
 
 endmodule
 
