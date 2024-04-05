@@ -1,5 +1,5 @@
-`ifndef __mac_unit_Vert_32_no_mul_V__
-`define __mac_unit_Vert_32_no_mul_V__
+`ifndef __mac_unit_Vert_16_no_mul_V__
+`define __mac_unit_Vert_16_no_mul_V__
 
 `include "mux_5to1.v"
 
@@ -63,12 +63,12 @@ module shifter_constant #( // can shift 3-bit or no shift
 endmodule
 
 
-module mac_unit_Vert_32_no_mul
+module mac_unit_Vert_16_no_mul
 #(
     parameter DATA_WIDTH    = 8,
-	parameter VEC_LENGTH    = 32,
-	parameter MUX_SEL_WIDTH = 3,
-	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 2,
+	parameter VEC_LENGTH    = 16,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
+	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
@@ -78,9 +78,10 @@ module mac_unit_Vert_32_no_mul
 	input  logic                               load_accum,
 
 	input  logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0],   // input activation (signed)
-	input  logic          [MUX_SEL_WIDTH-1:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic          [2:0]                act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
+
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_msb,        // specify if the current column is MSB
@@ -90,7 +91,7 @@ module mac_unit_Vert_32_no_mul
 	output logic signed   [RESULT_WIDTH-1:0]   result
 );
 	genvar i, j;
-	localparam PSUM_ACT_WIDTH = SUM_ACT_WIDTH + 2;
+	localparam PSUM_ACT_WIDTH = SUM_ACT_WIDTH + 1;
 
 	logic signed [DATA_WIDTH-1:0] adder_in  [VEC_LENGTH/2-1:0]; // there are 50% activation to be selected
 	generate
@@ -130,7 +131,7 @@ module mac_unit_Vert_32_no_mul
 	endgenerate
 
 	logic signed [PSUM_ACT_WIDTH-1:0]  psum_act_total;
-	assign psum_act_total = (psum_act_true[0] + psum_act_true[1]) + (psum_act_true[2] + psum_act_true[3]);
+	assign psum_act_total = psum_act_true[0] + psum_act_true[1];
 
 	logic signed [PSUM_ACT_WIDTH-1:0]  psum_act_shift_in;
 	logic signed [PSUM_ACT_WIDTH+6:0]  psum_act_shift_out;
@@ -151,7 +152,7 @@ module mac_unit_Vert_32_no_mul
 	logic signed [PSUM_ACT_WIDTH+6:0] psum_act_shift_reg;
 	always @(posedge clk) begin
 		if (reset) begin
-			accum_out           <= 0;
+			accum_out <= 0;
 			psum_act_shift_reg  <= 0;
 		end else if	(en_acc) begin
 			psum_act_shift_reg  <= psum_act_shift_out;
@@ -163,12 +164,12 @@ module mac_unit_Vert_32_no_mul
 endmodule
 
 
-module mac_unit_Vert_32_no_mul_clk
+module mac_unit_Vert_16_no_mul_clk
 #(
     parameter DATA_WIDTH    = 8,
-	parameter VEC_LENGTH    = 32,
-	parameter MUX_SEL_WIDTH = 3,
-	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 2,
+	parameter VEC_LENGTH    = 16,
+	parameter MUX_SEL_WIDTH = $clog2(VEC_LENGTH),
+	parameter SUM_ACT_WIDTH = $clog2(VEC_LENGTH) + DATA_WIDTH - 1,
 	parameter ACC_WIDTH     = DATA_WIDTH + 16,
 	parameter RESULT_WIDTH  = 2*DATA_WIDTH
 ) (
@@ -178,7 +179,7 @@ module mac_unit_Vert_32_no_mul_clk
 	input  logic                               load_accum,
 
 	input  logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0],   // input activation (signed)
-	input  logic          [MUX_SEL_WIDTH-1:0]  act_sel_in  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic          [2:0]                act_sel_in  [VEC_LENGTH/2-1:0], // input activation MUX select signal
 	input  logic                               act_val_in  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act_in  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
@@ -191,7 +192,7 @@ module mac_unit_Vert_32_no_mul_clk
 );
 	genvar i, j;
 	
-	logic        [MUX_SEL_WIDTH-1:0]  act_sel  [VEC_LENGTH/2-1:0]; 
+	logic        [2:0]                act_sel  [VEC_LENGTH/2-1:0]; 
 	logic                             act_val  [VEC_LENGTH/2-1:0]; 
 	logic signed [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0] ;
 	logic signed [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0];
@@ -244,7 +245,7 @@ module mac_unit_Vert_32_no_mul_clk
 		end
 	end
 
-	mac_unit_Vert_32_no_mul #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
+	mac_unit_Vert_16_no_mul #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
 
 `endif 

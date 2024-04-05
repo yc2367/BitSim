@@ -171,6 +171,7 @@ module mac_unit_Wave_16_clk
 	input  logic                             en,
 	input  logic                             load_accum,
 
+	input  logic signed [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0], 
 	input  logic                             sign_in  [VEC_LENGTH-1:0],
 	input  logic                             w_b      [VEC_LENGTH-1:0],
 	input  logic        [2:0]                column_idx_in,
@@ -189,8 +190,8 @@ module mac_unit_Wave_16_clk
 		always @(posedge clk) begin
 			if (reset) begin
 				act_in[j] <= 0;
-				sign[j] <= 0;
-				w_bit[j] <= 0;
+				sign[j]   <= 0;
+				w_bit[j]  <= 0;
 			end else begin
 				act_in[j] <= act[j];
 				sign[j]   <= sign_in[j];

@@ -78,11 +78,11 @@ module mac_unit_Vert_16
 	input  logic                               load_accum,
 
 	input  logic signed   [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0],   // input activation (signed)
-	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic          [2:0]                act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
 	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
 	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
-	input  logic          [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
+	input  logic signed   [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
 
 	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
@@ -203,26 +203,44 @@ module mac_unit_Vert_16_clk
 	input  logic                               en_acc,
 	input  logic                               load_accum,
 
-	input  logic signed   [DATA_WIDTH-1:0]     act      [VEC_LENGTH-1:0],   // input activation (signed)
-	input  logic          [MUX_SEL_WIDTH-2:0]  act_sel  [VEC_LENGTH/2-1:0], // input activation MUX select signal
-	input  logic                               act_val  [VEC_LENGTH/2-1:0], // whether activation is valid
-	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
+	input  logic signed   [DATA_WIDTH-1:0]     act         [VEC_LENGTH-1:0],   // input activation (signed)
+	input  logic          [2:0]                act_sel_in  [VEC_LENGTH/2-1:0], // input activation MUX select signal
+	input  logic                               act_val_in  [VEC_LENGTH/2-1:0], // whether activation is valid
+	input  logic signed   [SUM_ACT_WIDTH-1:0]  sum_act_in  [VEC_LENGTH/8-1:0], // sum of a group of activations (signed)
 
 	input  logic signed   [2:0]                mul_const,     // constant sent to the multiplier to multiply sum_act
-
-	input  logic          [2:0]                column_idx,    // current column index for shifting 
 	input  logic                               is_shift_mul,  // specify whether shift the 3-bit constant multiplier
 	input  logic                               en_mul,        // specify whether enable 3-bit constant multiplier
-	input  logic                               is_msb,        // specify if the current column is MSB
-	input  logic                               is_skip_zero [VEC_LENGTH/8-1:0],  // specify if skip bit 0
+
+	input  logic          [2:0]                column_idx_in,    // current column index for shifting 
+	input  logic                               is_msb_in,        // specify if the current column is MSB
+	input  logic                               is_skip_zero_in [VEC_LENGTH/8-1:0],  // specify if skip bit 0
 	
 	input  logic signed   [ACC_WIDTH-1:0]      accum_prev,
 	output logic signed   [RESULT_WIDTH-1:0]   result
 );
 	genvar i, j;
 	
-	logic signed [DATA_WIDTH-1:0]  act_in [VEC_LENGTH-1:0];
+	logic        [2:0]                act_sel  [VEC_LENGTH/2-1:0]; 
+	logic                             act_val  [VEC_LENGTH/2-1:0]; 
+	logic signed [DATA_WIDTH-1:0]     act_in   [VEC_LENGTH-1:0] ;
+	logic signed [SUM_ACT_WIDTH-1:0]  sum_act  [VEC_LENGTH/8-1:0];
+	logic        [2:0]                column_idx;    // current column index for shifting 
+	logic                             is_msb;        // specify if the current column is MSB
+	logic                             is_skip_zero [VEC_LENGTH/8-1:0];  // specify if skip bit 0
 	generate
+	for (j=0; j<VEC_LENGTH/2; j=j+1) begin
+		always @(posedge clk) begin
+			if (reset) begin
+				act_sel[j] <= 0;
+				act_val[j] <= 0;
+			end else begin
+				act_sel[j] <= act_sel_in[j];
+				act_val[j] <= act_val_in[j];
+			end
+		end
+	end
+
 	for (j=0; j<VEC_LENGTH; j=j+1) begin
 		always @(posedge clk) begin
 			if (reset) begin
@@ -232,7 +250,29 @@ module mac_unit_Vert_16_clk
 			end
 		end
 	end
+
+	for (j=0; j<VEC_LENGTH/8; j=j+1) begin
+		always @(posedge clk) begin
+			if (reset) begin
+				sum_act[j] <= 0;
+				is_skip_zero[j] <= 0;
+			end else begin
+				sum_act[j] <= sum_act_in[j];
+				is_skip_zero[j] <= is_skip_zero_in[j];
+			end
+		end
+	end
 	endgenerate
+	
+	always @(posedge clk) begin
+		if (reset) begin
+			column_idx <= 0;
+			is_msb <= 0;
+		end else begin
+			column_idx <= column_idx_in;
+			is_msb <= is_msb_in;
+		end
+	end
 
 	mac_unit_Vert_16 #(DATA_WIDTH, VEC_LENGTH, MUX_SEL_WIDTH, SUM_ACT_WIDTH, ACC_WIDTH, RESULT_WIDTH) mac (.*);
 endmodule
