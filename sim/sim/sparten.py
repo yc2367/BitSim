@@ -352,13 +352,11 @@ class Sparten(Accelerator):
             w_dim = self.weight_dim[name]
             i_dim = self.input_dim[name]
             o_dim = self.output_dim[name]
-            w_num_total = np.prod(w_dim)
             o_num_total = np.prod(o_dim)
             i_num_total = np.prod(i_dim)
-            w_num_zero  = self.w_num_zero[name]
             i_num_zero  = self.i_num_zero[name]
             o_num_zero  = self.o_num_zero[name]
-            w_density   = 1 - (w_num_zero / w_num_total)
+            w_density   = 1
             i_density   = 1 - (i_num_zero / i_num_total)
             o_density   = 1 - (o_num_zero / o_num_total)
             if w_dim is not None:

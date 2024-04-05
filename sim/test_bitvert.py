@@ -16,6 +16,7 @@ if __name__ == "__main__":
         sram_rd_energy = acc.calc_sram_rd_energy() / 1e6
         sram_wr_energy = acc.calc_sram_wr_energy() / 1e6
         dram_energy    = acc.calc_dram_energy() / 1e6
+        onchip_energy  = compute_energy + sram_rd_energy + sram_wr_energy
         total_energy   = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
         
         print(f'total cycle:        {total_cycle}')
@@ -25,6 +26,7 @@ if __name__ == "__main__":
         print(f'sram rd energy:     {sram_rd_energy} uJ')
         print(f'sram wr energy:     {sram_wr_energy} uJ')
         print(f'dram energy:        {dram_energy} uJ')
+        print(f'on-chip energy:     {onchip_energy} uJ')
         print(f'total energy:       {total_energy} uJ')
 
         print('\n')

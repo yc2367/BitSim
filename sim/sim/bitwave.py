@@ -14,7 +14,7 @@ from sim.util.bin_int_convert import int_to_signMagnitude
 class Bitwave(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.2575 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
+    PE_ENERGY = 0.2475 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_SCHEDULER_ENERGY_PER_ROW = 0.06575 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     PE_AREA = 1

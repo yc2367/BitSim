@@ -11,7 +11,7 @@ from hw.accelerator import Accelerator
 class Stripes(Accelerator):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625
-    PE_ENERGY = 0.30125 * PR_SCALING # energy per 8-way DP PE
+    PE_ENERGY = 0.28125 * PR_SCALING # energy per 8-way DP PE
     #PE_ENERGY = 0.23375 * PR_SCALING
     W_REG_ENERGY_PER_ROW = 0.46 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     #W_REG_ENERGY_PER_ROW = 0.23 * PR_SCALING

@@ -15,7 +15,7 @@ class Bitlet(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625
     #PE_ENERGY = 0.32 * PR_SCALING # energy per PE
-    PE_ENERGY = 0.355 * PR_SCALING # energy per PE
+    PE_ENERGY = 0.2925 * PR_SCALING # energy per PE
     W_REG_ENERGY_PER_ROW = 1.1325 * PR_SCALING # energy (pJ) of the weight shift register file for a PE row
     #W_REG_ENERGY_PER_ROW = 0.61875 * PR_SCALING
     I_REG_ENERGY_PER_COL = (1.054 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column

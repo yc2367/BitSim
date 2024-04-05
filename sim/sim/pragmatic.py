@@ -13,7 +13,7 @@ class Pragmatic(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.46625 * PR_SCALING # energy per PE
+    PE_ENERGY = 0.41375 * PR_SCALING # energy per PE
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_REG_ENERGY_PER_ROW = 0.763 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     #W_REG_ENERGY_PER_ROW = 0.38125 * PR_SCALING
