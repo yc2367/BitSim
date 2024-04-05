@@ -6,7 +6,7 @@ software/plot/*
 hardware/simv.daidir/*
 hardware/csrc/*
 hardware/syn/*
-hardware/tb/*
+hardware/tb*/*
 hardware/*.tcl
 hardware/*.log
 hardware/*.txt
