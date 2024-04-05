@@ -8,6 +8,8 @@ hardware/csrc/*
 hardware/syn/*
 hardware/tb*/*
 hardware/*.tcl
+hardware/*.vcd
+hardware/*.sh
 hardware/*.log
 hardware/*.txt
 hardware/work/*
