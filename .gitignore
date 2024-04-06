@@ -15,6 +15,7 @@ hardware/work/*
 hardware/tmp/*
 hardware/ucli.key 
 hardware/simv 
+hardware/Makefile 
 hardware/program.out
 
 save/*
