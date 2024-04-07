@@ -1,15 +1,13 @@
 from sim.bitvert import BitVert 
 from model_profile.models.models import MODEL
 
-name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
+name_list = ['resnet34', 'resnet50', 'vit-small', 'vit-base']
 name = name_list[0]
-model = MODEL[name]
-model = model()
 
 if __name__ == "__main__":
-    for en_b2s in [False, True]:
-        acc = BitVert(8, 8, 32, [16, 16], name, model, layer_prec={}, 
-                    en_b2s=en_b2s, en_lsb_pruning=False, en_ol_channel=False)
+    for en_ol_channel in [ True]:
+        acc = BitVert(8, 8, 32, [16, 16], name, None, 
+                    en_b2s=True, en_lsb_pruning=False, en_ol_channel=en_ol_channel)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

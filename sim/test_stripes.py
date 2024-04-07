@@ -1,14 +1,11 @@
 from sim.stripes import Stripes 
-from model_profile.models.models import MODEL
 
-name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
+name_list = ['resnet34', 'resnet50', 'vit-small', 'vit-base']
 
 if __name__ == "__main__":
-    for i in range(3):
+    for i in range(0, 1):
         name = name_list[i]
-        model = MODEL[name]
-        model = model()
-        acc = Stripes(8, 8, 16, [16, 16], name, model)
+        acc = Stripes(8, 8, 16, [16, 16], name, None)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

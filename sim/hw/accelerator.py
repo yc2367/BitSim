@@ -16,6 +16,7 @@ class Accelerator:
                  pe_array_dim: List[int],
                  model_name: str,
                  model: nn.Module):
+        self.model_name     = model_name
         self.pe             = pe
         self.pe_array_dim   = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
         self.total_pe_count = np.prod(pe_array_dim)

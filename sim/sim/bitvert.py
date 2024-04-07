@@ -5,8 +5,7 @@ import torch.nn as nn
 from typing import List, Dict
 from sim.stripes import Stripes
 from hw.mem.mem_instance import MemoryInstance
-from hw.alu.alu_unit import BitSerialPE
-
+from model_profile.meters.bitvert_profiler import BitVertProfiler
 from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_twosComplement
 
@@ -29,16 +28,13 @@ class BitVert(Stripes):
                  pe_array_dim: List[int],
                  model_name: str,
                  model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
-                 layer_prec:     Dict={},    # the precision of every layer
                  en_b2s:         bool=False,
                  en_lsb_pruning: bool=False, # whether enable LSB column pruning using bi-directional bit sparsity
                  en_ol_channel:  bool=False  # whether enable outlier channel groupping
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, model, init_mem=False)
-        
-        self.model_q = MODEL[model_name].cpu() # quantized model
-        
+                
         if en_lsb_pruning or en_ol_channel:
             self.en_b2s = True
         else:
@@ -50,18 +46,8 @@ class BitVert(Stripes):
         self.en_ol_channel = en_ol_channel
 
         # to be modified later
-        self.w_prec_config = {}
-        for name in self.layer_name_list:
-            # format for a layer configuration: [(prec_high, % of channel), (prec_low, % of channel)]
-            if (not self.en_lsb_pruning) and (not self.en_ol_channel):
-                # assign input_precision_p to every layer
-                self.w_prec_config[name] = [(input_precision_p, 1.0), (input_precision_p, 0.)]
-            elif self.en_lsb_pruning:
-                # only assign a single (lower) precision to every layer
-                self.w_prec_config[name] = [(input_precision_p-2, 1.0), (input_precision_p, 0.)]
-            elif self.en_ol_channel:
-                # assign high precision to few outlier channels, assign low precision to most other channels
-                self.w_prec_config[name] = [(input_precision_p, 0.25), (input_precision_p/2, 0.75)]
+        self.w_prec_config = self._calc_w_prec_config()
+
         # effective weight precision
         self.w_prec_eff = {}
         for name in self.layer_name_list:
@@ -72,6 +58,33 @@ class BitVert(Stripes):
         self._init_mem()
         self._check_layer_mem_size()
         self._calc_num_mem_refetch()
+    
+    def _calc_w_prec_config(self):
+        w_prec_config = {}
+        profiler = BitVertProfiler(self.model_name)
+        nonzero_channel = profiler.nonzero_channels
+        prec_h = self.pe.input_precision_p
+        prec_l = 4
+        for name in self.layer_name_list:
+            # format for a layer configuration: [(prec_high, % of channel), (prec_low, % of channel)]
+            if (not self.en_lsb_pruning) and (not self.en_ol_channel):
+                # assign input_precision_p to every layer
+                w_prec_config[name] = [(prec_h, 1.0), (prec_h, 0.)]
+            elif self.en_lsb_pruning:
+                # only assign a single (lower) precision to every layer
+                w_prec_config[name] = [(prec_h-2, 1.0), (prec_h, 0.)]
+            elif self.en_ol_channel:
+                # assign high precision to few outlier channels, assign low precision to most other channels
+                num_total_channel = self.weight_dim[name][-1]
+                if 'conv' in name:
+                    tmp_name = name.rstrip('.conv')
+                else:
+                    tmp_name = name
+                num_outlier_channel = len(nonzero_channel[tmp_name])
+                prec_high_ratio = num_outlier_channel / num_total_channel
+                w_prec_config[name] = [(prec_h, prec_high_ratio), (prec_l, 1 - prec_high_ratio)]
+        return w_prec_config
+            
 
     def calc_cycle(self):
         self._calc_compute_cycle()
