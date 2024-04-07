@@ -5,7 +5,7 @@ import torch.nn as nn
 from typing import List
 from sim.stripes import Stripes
 from sim.util.model_quantized import MODEL
-from sim.util.bin_int_convert import int_to_signMagnitude
+from sim.util.bin_int_convert import int_to_twosComplement
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
@@ -107,8 +107,10 @@ class Pragmatic(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=0)).item()
-                        cycle_kernel += int(cycle_tile_k)
+                        latency = torch.sum(tile_k, dim=0)
+                        gt_half = latency.gt(self.pe.input_precision_p / 2)
+                        latency[gt_half] = self.pe.input_precision_p - latency[gt_half]
+                        cycle_tile_k = torch.max(latency).item() + 1
 
                         num_eff_op_kernel += torch.sum(tile_k).item()
                         num_total_op_kernel += (cycle_tile_k * pe_group_size * num_pe_row)
@@ -122,7 +124,10 @@ class Pragmatic(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0)).item()
+                            latency = torch.sum(tile_cw, dim=0)
+                            gt_half = latency.gt(self.pe.input_precision_p / 2)
+                            latency[gt_half] = self.pe.input_precision_p - latency[gt_half]
+                            cycle_tile_cw = torch.max(latency).item() + 1
                             cycle_kernel += int(cycle_tile_cw)
 
                             num_eff_op_kernel += torch.sum(tile_cw).item()
@@ -176,7 +181,10 @@ class Pragmatic(Stripes):
                     l_ti_k = ti_k * pe_group_size
                     u_ti_k = (ti_k+1) * pe_group_size
                     tile_k = tile_cw[:, l_ti_k:u_ti_k]
-                    cycle_tile_k = torch.max(torch.sum(tile_k, dim=0)).item()
+                    latency = torch.sum(tile_k, dim=0)
+                    gt_half = latency.gt(self.pe.input_precision_p / 2)
+                    latency[gt_half] = self.pe.input_precision_p - latency[gt_half]
+                    cycle_tile_k = torch.max(latency).item() + 1
                     cycle_kernel += int(cycle_tile_k)
                     
                     num_eff_op_kernel += torch.sum(tile_k).item()
@@ -225,7 +233,10 @@ class Pragmatic(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0)).item()
+                latency = torch.sum(tile_cin, dim=0)
+                gt_half = latency.gt(self.pe.input_precision_p / 2)
+                latency[gt_half] = self.pe.input_precision_p - latency[gt_half]
+                cycle_tile_cin = torch.max(latency).item() + 1
                 cycle_kernel += int(cycle_tile_cin)
 
                 num_eff_op_kernel += torch.sum(tile_cin).item()
@@ -244,7 +255,7 @@ class Pragmatic(Stripes):
             if ( layer_name == name ):
                 w = layer.weight()
                 wq = torch.int_repr(w)
-                wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
                 return wqb_twosComplement

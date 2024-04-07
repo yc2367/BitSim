@@ -14,7 +14,8 @@ from sim.util.bin_int_convert import int_to_twosComplement
 class BitVert(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.38 * PR_SCALING # energy per 32-way DP PE, multiplied by 1.5 to account for post P&R
+    PE_ENERGY = 0.41 * PR_SCALING # energy per 32-way DP PE, multiplied by 1.5 to account for post P&R
+    #PE_ENERGY = 0.28 * PR_SCALING # energy per 16-way DP PE, multiplied by 1.5 to account for post P&R
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_REG_ENERGY_PER_ROW = 1.205 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     I_REG_ENERGY_PER_COL = (1.06 + DISPATCHER_ENERGY_PER_COL) * PR_SCALING # energy (pJ) of the activation register file for a PE column

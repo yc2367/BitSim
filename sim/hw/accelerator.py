@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from hw.alu.alu_unit import PE
-from model_profile.meters.dim import DIM
+from model_profile.meters.layer_dim_profiler import LayerDim
 
 class Accelerator:
     ### Global variable
@@ -20,11 +20,10 @@ class Accelerator:
         self.pe_array_dim   = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
         self.total_pe_count = np.prod(pe_array_dim)
 
-        self._init_model_profiler(model_name, model)
+        self._init_model_profiler(model_name)
     
-    def _init_model_profiler(self, model_name, model):
-        dim_profiler = DIM(model_name, model, device=self.DEVICE, input_size=224)
-        dim_profiler.fit()
+    def _init_model_profiler(self, model_name):
+        dim_profiler = LayerDim(model_name)
 
         # format: {layer_name: [k, k, in_channel, out_channel], ...}
         self.weight_dim = dim_profiler.weight_dim 

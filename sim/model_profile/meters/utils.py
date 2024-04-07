@@ -47,4 +47,5 @@ def calculate_adaptive_avg(kernel_size, output_size):
     total_div = 1
     kernel_op = kernel_size + total_div
     return torch.DoubleTensor([int(kernel_op * output_size)])
+    
 
