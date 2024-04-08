@@ -2,8 +2,10 @@ from sim.stripes import Stripes
 
 name_list = ['resnet34', 'resnet50', 'vit-small', 'vit-base']
 
+idx = 0
+
 if __name__ == "__main__":
-    for i in range(0, 1):
+    for i in range(idx, idx+1):
         name = name_list[i]
         acc = Stripes(8, 8, 16, [16, 16], name, None)
 

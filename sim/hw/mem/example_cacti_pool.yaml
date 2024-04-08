@@ -1,10 +1,10 @@
-16384.0_Byte_256.0_BW_1_1_0:
-  IO_bus_width: 256
-  area: 0.0507759
+16384.0_Byte_128.0_BW_1_1_0:
+  IO_bus_width: 128
+  area: 0.0461889
   bank_count: 1
   cost:
-    read_word: 0.00805027
-    write_word: 0.0226132
+    read_word: 0.00608131
+    write_word: 0.011671
   ex_rd_port: 1
   ex_wr_port: 1
   latency: 0.312608
