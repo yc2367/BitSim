@@ -47,7 +47,7 @@ for n, m in model.named_modules():
 GROUP_SIZE = 16
 w_bitwidth = 8
 
-loss = 1
+loss = 0
 if loss == 0:
     metric = 'MSE'
 else: 
@@ -57,12 +57,13 @@ pruned_col_num = 3
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    fig_title = ['ResNet50 Conv4.1 Weights', 'With BitWave Bit-flip', 'With BitVert Binary-Pruning']
-
+    fig_title = ['ResNet50 Conv4.1.3 Weight', 'With BitWave Bit-flip', 'With BitVert Binary-Pruning']
+    color_list = [(150/255, 187/255, 245/255), (255/255, 150/255, 150/255), (250/255, 161/255, 156/255)]
+    ticksize = 14
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
         file = open(f'{model_name}_prune_loss_report_g{GROUP_SIZE}_c{num_pruned_column}.txt', 'w')
-        for i in range(len(weight_list)-5, len(weight_list)-1):
+        for i in range(len(weight_list)-5, len(weight_list)-4):
             weight_test = weight_list[i]
             weight_shape = weight_list[i].shape
             print(f'Layer {name_list[i]}')
@@ -95,13 +96,10 @@ def main():
                     pass
                 
                 # plot distribution
-                if func == 0: 
-                    color = (140/255, 205/255, 140/255)
-                else:
-                    color = (250/255, 161/255, 156/255)
+                color = color_list[func]
                 
                 if func == 1:
-                    num_bin = 128
+                    num_bin = 64
                 else:
                     num_bin = 64
                 fig, ax = plt.subplots()
@@ -109,17 +107,20 @@ def main():
                 fig.set_figheight(5)
                 sns.histplot(weight_test_new.cpu().reshape(-1).numpy(), 
                             bins=num_bin, color=color, ec=None, ax=ax)
-                ax.set_xlabel('Weight Value', fontsize=12, weight='bold', labelpad=5)
-                ax.set_ylabel(r'Count ($\times$1000)', fontsize=12, weight='bold', labelpad=0)
+                ax.set_xlabel('Weight Value', fontsize=ticksize+1, weight='bold', labelpad=5)
+                if func == 0:
+                    ax.set_ylabel(r'Count ($\times$1000)', fontsize=ticksize+1, weight='bold', labelpad=0)
+                else:
+                    ax.set_ylabel(r'   ', fontsize=ticksize+1, weight='bold', labelpad=0)
                 ax.set_xlim(-135, 135)
                 ax.set_ylim(0, 1e5)
                 x_ticklabels = ax.get_xticks()
                 y_ticklabels = ax.get_yticks()
                 x_ticklabels = [int(n) for n in x_ticklabels]
                 y_ticklabels = [int(n // 1e3) for n in y_ticklabels]
-                ax.set_xticklabels(x_ticklabels, fontsize=11)
-                ax.set_yticklabels(y_ticklabels, fontsize=11)
-                ax.set_title(fig_title[func], fontsize=12, weight='bold')
+                ax.set_xticklabels(x_ticklabels, fontsize=ticksize)
+                ax.set_yticklabels(y_ticklabels, fontsize=ticksize)
+                #ax.set_title(fig_title[func], fontsize=ticksize, weight='bold')
                 fig.savefig(f'./plot/{name_list[i]}_new_{format.replace(" ", "")}.png', dpi=200, bbox_inches="tight")
 
                 weight_original = weight_test.to(dtype=torch.float, device=device)
