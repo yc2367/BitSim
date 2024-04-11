@@ -47,7 +47,7 @@ for n, m in model.named_modules():
 GROUP_SIZE = 16
 w_bitwidth = 8
 
-loss = 0
+loss = 1
 if loss == 0:
     metric = 'MSE'
 else: 
@@ -58,7 +58,7 @@ pruned_col_num = 3
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     fig_title = ['ResNet50 Conv4.1.3 Weight', 'With BitWave Bit-flip', 'With BitVert Binary-Pruning']
-    color_list = [(150/255, 187/255, 245/255), (255/255, 150/255, 150/255), (250/255, 161/255, 156/255)]
+    color_list = [(140/255, 205/255, 140/255), (255/255, 150/255, 150/255), (140/255, 205/255, 140/255)]
     ticksize = 14
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
@@ -75,7 +75,7 @@ def main():
                 if func == 0:
                     format = 'Original'
                     weight_test_new = weight_test
-                
+                    weight_test_new_5b = torch.load('layer4.1.conv3.conv.ops_x2_baseline5bit.pt')
                 if func == 1:
                     format = 'Round to Nearest'
                     if len(weight_test.shape) == 4:
@@ -107,6 +107,9 @@ def main():
                 fig.set_figheight(5)
                 sns.histplot(weight_test_new.cpu().reshape(-1).numpy(), 
                             bins=num_bin, color=color, ec=None, ax=ax)
+                if func == 0:
+                    sns.histplot(weight_test_new_5b.cpu().reshape(-1).numpy(), 
+                            bins=32, color=(255/255, 150/255, 150/255), ec=None, ax=ax)
                 ax.set_xlabel('Weight Value', fontsize=ticksize+1, weight='bold', labelpad=5)
                 if func == 0:
                     ax.set_ylabel(r'Count ($\times$1000)', fontsize=ticksize+1, weight='bold', labelpad=0)
@@ -118,8 +121,13 @@ def main():
                 y_ticklabels = ax.get_yticks()
                 x_ticklabels = [int(n) for n in x_ticklabels]
                 y_ticklabels = [int(n // 1e3) for n in y_ticklabels]
-                ax.set_xticklabels(x_ticklabels, fontsize=ticksize)
+                if func == 0:
+                    ax.tick_params('y', length=5)
+                else:
+                    ax.tick_params('y', length=0)
                 ax.set_yticklabels(y_ticklabels, fontsize=ticksize)
+                ax.set_xticklabels(x_ticklabels, fontsize=ticksize)
+                
                 #ax.set_title(fig_title[func], fontsize=ticksize, weight='bold')
                 fig.savefig(f'./plot/{name_list[i]}_new_{format.replace(" ", "")}.png', dpi=200, bbox_inches="tight")
 

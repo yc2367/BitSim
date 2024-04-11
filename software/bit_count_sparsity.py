@@ -1,55 +1,46 @@
 import torch
-import torch.nn as nn
-import torchvision
 import numpy as np
 from util.count_sparsity import *
-import argparse
-
-from torchvision.models.quantization import (ResNet18_QuantizedWeights, 
-                                             MobileNet_V2_QuantizedWeights,
-                                             ResNet50_QuantizedWeights)
+import argparse, json
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', choices = ['resnet18', 'resnet50', 'mobilenet_v2'])
+parser.add_argument('--model')
 args = parser.parse_args()
 
 model_name = args.model
+    
+def extract_weight_tensor(model_name: str):
+    base_path = '/home/yc2367/BitVert_DNN'
+    model_config_path = f'{base_path}/Baseline_Int8/{model_name}'
+    tensor_path = f'{model_config_path}/tensors'
+    layer_dim_path = f'{model_config_path}/tensors/matmul.json'
 
-if model_name == 'resnet18':
-    weights = ResNet18_QuantizedWeights
-    model = torchvision.models.quantization.resnet18(weights = weights, quantize=True)
-elif model_name == 'resnet50':
-    weights = ResNet50_QuantizedWeights
-    model = torchvision.models.quantization.resnet50(weights = weights, quantize=True)
-elif model_name == 'mobilenet_v2':
-    weights = MobileNet_V2_QuantizedWeights
-    model = torchvision.models.quantization.mobilenet_v2(weights = weights, quantize=True)
-else:
-    raise ValueError('ERROR! The provided model is not one of supported models.')
+    with open(layer_dim_path) as f:
+        layer_dim_list = json.load(f)
+    
+    weight_tensor_dict = {}
+    for layer_name, _ in layer_dim_list.items():
+        if 'conv' in layer_name:
+            weight_tensor_dict[layer_name] = torch.load(f'{tensor_path}/{layer_name}_x2.pt')
+        elif ('fc' in layer_name) or ('proj' in layer_name) or \
+            ('qkv' in layer_name) or ('classifier' in layer_name) :
+            weight_tensor_dict[layer_name] = torch.load(f'{tensor_path}/{layer_name}_x2.pt')
 
-model = model.cpu()
+    return weight_tensor_dict
 
-weight_list = []
-name_list   = []
-for n, m in model.named_modules():
-    if hasattr(m, "weight"):
-        print(m)
-        w = m.weight()
-        wint = torch.int_repr(w)
-        weight_list.append(wint)
-        name_list.append(n)
-
-GROUP_SIZE = 16
-w_bitwidth = 8
 
 def main():
+    weight_tensor_dict = extract_weight_tensor(model_name)
+    GROUP_SIZE = 16
+    w_bitwidth = 8
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     file = open(f'{model_name}_sparsity_group_{GROUP_SIZE}.txt', 'w')
 
     sparse_value_count = 0
     sparse_bit_count_sm = 0
     sparse_bit_count_2s = 0
-    sparse_bit_count_skip_01_sm = 0
+    sparse_bit_count_skip_0_col_sm = 0
     sparse_bit_count_skip_01_2s = 0
     sparse_bit_count_skip_01_msb = 0
 
@@ -57,8 +48,9 @@ def main():
     total_value_count_model = 0
     total_value_count_until_now  = 0
 
-    for i in range(len(weight_list)):
-        weight_test = weight_list[i]
+    count_zero_column = CountZeroColumn()
+
+    for name, weight_test in weight_tensor_dict.items():
         layer_total_value  = 0
         if len(weight_test.shape) == 4:
             _, layer_total_value = count_zero_value_conv(weight_test)
@@ -66,11 +58,10 @@ def main():
             _, layer_total_value = count_zero_value_fc(weight_test)
         total_value_count_model += layer_total_value
 
-    for i in range(len(weight_list)):
-        weight_test = weight_list[i]
+    for name, weight_test in weight_tensor_dict.items():
         print(weight_test.shape)
-        print(f'Layer {name_list[i]}')
-        file.writelines(f'Layer {name_list[i]} \n')
+        print(f'Layer {name}')
+        file.writelines(f'Layer {name} \n')
         file.writelines(f'Shape {weight_test.shape} \n')
         for func in [0, 1, 2, 3, 4, 5]:
             if func == 0:
@@ -111,14 +102,14 @@ def main():
                     sparse_bit_count_sm += layer_sparse_bit
                     total_bit_count_model += layer_total_bit
                 elif func == 2:
-                    format = 'Skip 1 or 0 bit, SM'
+                    format = 'Skip 0 col, Sign Mag'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
-                        layer_sparse_bit, _ = count_less_bit_sm_conv(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit = count_zero_column.count_zero_column_conv(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
                     elif len(weight_test.shape) == 2 and weight_test.shape[1] != 1:
-                        layer_sparse_bit, _ = count_less_bit_sm_fc(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit = count_zero_column.count_zero_column_fc(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
-                    sparse_bit_count_skip_01_sm += layer_sparse_bit
+                    sparse_bit_count_skip_0_col_sm += layer_sparse_bit
                 elif func == 3:
                     format = 'Skip 0 bit, 2s Comp'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
@@ -170,8 +161,8 @@ def main():
     print(line)
     file.writelines(f'{line} \n')
 
-    format = 'Skip 1 or 0 bit, SM'
-    line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_01_sm}'
+    format = 'Skip 0 col, Sign Mag'
+    line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_0_col_sm}'
     print(line)
     file.writelines(f'{line} \n')
 

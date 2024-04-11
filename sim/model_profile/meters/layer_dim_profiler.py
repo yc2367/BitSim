@@ -10,9 +10,9 @@ class LayerDim:
         (self.layer_name_list, 
          self.weight_dim, self.input_dim, self.output_dim) = self._get_layer_info(layer_dim_list)
     
-    def _extract_layer_name(self, model_name: str, group_size: int=32, col_num: int=4):
+    def _extract_layer_name(self, model_name: str):
         base_path = '/home/yc2367/BitVert_DNN'
-        model_config_path = f'{base_path}/BitVertZP_Grp{group_size}_N{col_num}/{model_name}'
+        model_config_path = f'{base_path}/Baseline_Int8/{model_name}'
         layer_dim_path = f'{model_config_path}/tensors/matmul.json'
 
         with open(layer_dim_path) as f:
@@ -37,7 +37,8 @@ class LayerDim:
                 weight_dim[layer_name] = [k, k, ci, co]
                 input_dim[layer_name]  = [bi, wi, hi, ci]
                 output_dim[layer_name] = [bo, ho, wo, co]
-            elif ('fc' in layer_name) or ('proj' in layer_name) or ('qkv' in layer_name):
+            elif ('fc' in layer_name) or ('proj' in layer_name) or \
+                ('qkv' in layer_name) or ('classifier' in layer_name):
                 layer_name_list.append(layer_name)
                 if len(layer_dim['x_shape']) == 2: # CNN
                     bi, ci = layer_dim['x_shape']

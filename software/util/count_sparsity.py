@@ -36,12 +36,13 @@ def count_zero_bit_sm_fc(wq_int, w_bitwidth=8, device='cpu'):
 
 
 def count_less_bit_sm_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
+    print('testtt', wq_int.shape)
     K, C, H, W = wq_int.shape # output channel, input channel, kernel width, kernel height
     if C < group_size:
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
     bit_one_count = torch.sum(wqb_signMagnitude, dim=-1)
@@ -59,7 +60,7 @@ def count_less_bit_sm_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
         group_size = C
     NUM_GROUP = K*C//group_size
     wq_int = wq_int.unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
     bit_one_count = torch.sum(wqb_signMagnitude, dim=-1)
@@ -95,7 +96,7 @@ def count_less_bit_2s_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     bit_one_count = torch.sum(wqb_twosComplement, dim=-1)
@@ -113,7 +114,7 @@ def count_less_bit_2s_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'):
         group_size = C
     NUM_GROUP = K*C//group_size
     wq_int = wq_int.unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
     bit_one_count = torch.sum(wqb_twosComplement, dim=-1)
@@ -131,7 +132,7 @@ def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cp
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -145,7 +146,7 @@ def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cp
     
     for i in range(1, int(w_bitwidth)):
         set_column_to_zero = msb_idx.ge(i)
-        wqb_twosComplement[i][set_column_to_zero] = wqb_twosComplement[i][set_column_to_zero] * 0
+        wqb_twosComplement[i][set_column_to_zero] = 0
     bit_one_count = torch.sum(wqb_twosComplement, dim=-1)
     skip_zero = bit_one_count.lt(group_size/2)
     bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
@@ -160,7 +161,7 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
         group_size = C
     NUM_GROUP = K*C//group_size
     wq_int = wq_int.unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -174,7 +175,7 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
     
     for i in range(1, int(w_bitwidth)):
         set_column_to_zero = msb_idx.ge(i)
-        wqb_twosComplement[i][set_column_to_zero] = wqb_twosComplement[i][set_column_to_zero] * 0
+        wqb_twosComplement[i][set_column_to_zero] = 0
     bit_one_count = torch.sum(wqb_twosComplement, dim=-1)
     skip_zero = bit_one_count.lt(group_size/2)
     bit_one_count[skip_zero] = group_size - bit_one_count[skip_zero]
@@ -182,18 +183,19 @@ def count_less_bit_clip_msb_fc(wq_int, w_bitwidth=8, group_size=16, device='cpu'
     total_bit_count = K * C * w_bitwidth
     return int(sparse_bit_count), int(total_bit_count)
 
-class countZeroColumn:
+class CountZeroColumn:
     def __init__(self) -> None:
         self.num_zero_column = 0
+        self.num_zero_bits = 0
         self.num_total_column = 0
     
-    def count_zero_column_conv(self, wq_int, w_bitwidth, group_size, device='cpu'):
+    def count_zero_column_conv(self, wq_int, w_bitwidth=8, group_size=16, device='cpu'):
         K, C, H, W = wq_int.size() # output channel, input channel, kernel width, kernel height
         if C < group_size:
             group_size = C
         NUM_GROUP = K*W*H*C//group_size
         wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-        wq_int = wq_int.view(NUM_GROUP, group_size)
+        wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
         wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -203,16 +205,20 @@ class countZeroColumn:
             eq_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
             zero_column_mask[i][eq_zero] = True
         
-        self.num_zero_column += torch.sum(zero_column_mask)
+        num_zero_column = torch.sum(zero_column_mask)
+        self.num_zero_column += num_zero_column
+        self.num_zero_bits += (num_zero_column * group_size)
         self.num_total_column += NUM_GROUP*w_bitwidth
 
-    def count_zero_column_fc(self, wq_int, w_bitwidth, group_size, device='cpu'):
+        return (num_zero_column * group_size)
+
+    def count_zero_column_fc(self, wq_int, w_bitwidth=8, group_size=16, device='cpu'):
         K, C = wq_int.size() # output channel, input channel, kernel width, kernel height
         if C < group_size:
             group_size = C
         NUM_GROUP = K*C//group_size
         wq_int = wq_int.unsqueeze(-1)
-        wq_int = wq_int.view(NUM_GROUP, group_size)
+        wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
         wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -222,5 +228,9 @@ class countZeroColumn:
             eq_zero = torch.all(torch.eq(wqb_signMagnitude[i], 0.), dim=-1)
             zero_column_mask[i][eq_zero] = True
         
-        self.num_zero_column += torch.sum(zero_column_mask)
+        num_zero_column = torch.sum(zero_column_mask)
+        self.num_zero_column += num_zero_column
+        self.num_zero_bits += (num_zero_column * group_size)
         self.num_total_column += NUM_GROUP*w_bitwidth
+
+        return (num_zero_column * group_size)
