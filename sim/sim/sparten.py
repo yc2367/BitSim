@@ -234,7 +234,7 @@ class Sparten(Accelerator):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
     
     def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
@@ -260,7 +260,7 @@ class Sparten(Accelerator):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
 
     def _calc_tile_fc(self, w_dim, o_dim):
@@ -388,10 +388,10 @@ class Sparten(Accelerator):
         num_w_sram_wr = math.ceil(cw * w_prec / w_sram_min_wr_bw) * (k**2) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw * batch_size
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw 
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow 
         energy_o_sram_wr = num_o_sram_wr * o_density * i_sram_wr_cost
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
@@ -417,10 +417,10 @@ class Sparten(Accelerator):
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw)  * token_num
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw)  * token_num
         if token_num == 1: # CNN last FC layer
             energy_o_sram_wr = 0
         else:
@@ -553,8 +553,8 @@ class Sparten(Accelerator):
                     _, oh ,ow, _ = o_dim
 
                     w_mem_dense = math.ceil(cw * w_prec / 8) * k**2 * cout
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw 
+                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow 
                     self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
@@ -565,11 +565,11 @@ class Sparten(Accelerator):
                     batch_size, token_num, _ = o_dim
 
                     w_mem_dense = math.ceil(cin * w_prec / 8) * cout
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size * token_num
+                    i_mem_dense = math.ceil(cin * i_prec / 8)  * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         o_mem_dense = 0
                     else:
-                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size * token_num
+                        o_mem_dense = math.ceil(cout * i_prec / 8)  * token_num
                     self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8

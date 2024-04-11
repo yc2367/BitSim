@@ -210,7 +210,7 @@ class BitVert(Stripes):
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
     
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
@@ -265,7 +265,7 @@ class BitVert(Stripes):
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
 
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
@@ -408,8 +408,8 @@ class BitVert(Stripes):
                     
                     num_weight = cw * k**2 * cout
                     self._w_mem_required[name] = num_weight * self.w_prec_eff[name] / 8
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw 
+                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow 
                 else:
                     # input channel, output channel
                     cin, cout = w_dim
@@ -418,11 +418,11 @@ class BitVert(Stripes):
 
                     num_weight = cin * cout
                     self._w_mem_required[name] = num_weight * self.w_prec_eff[name] / 8
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * token_num
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8)  * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
                     else:
-                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * batch_size * token_num
+                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
 
     def _get_quantized_weight(self, layer_name):
         for name, layer in self.model_q.named_modules():

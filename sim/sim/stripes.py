@@ -59,7 +59,7 @@ class Stripes(Accelerator):
         k, _, cw, cout = w_dim
         # batch size, output feature height, output feature width, output channel
         batch_size, oh , ow, _ = o_dim
-        num_eff_ops = (k**2) * cw * cout * oh * ow * batch_size
+        num_eff_ops = (k**2) * cw * cout * oh * ow 
         return num_eff_ops * w_prec / self.pe_dotprod_size
     
     def _calc_eff_ops_fc(self, w_dim, o_dim):
@@ -68,7 +68,7 @@ class Stripes(Accelerator):
         cin, cout = w_dim
         # batch size, sample size, output channel
         batch_size, token_num, _ = o_dim
-        num_eff_ops = cin * cout * token_num * batch_size
+        num_eff_ops = cin * cout * token_num 
         return num_eff_ops * w_prec / self.pe_dotprod_size
 
     def calc_cycle(self):
@@ -152,7 +152,7 @@ class Stripes(Accelerator):
         tile_oh    = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
     
     def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
@@ -178,7 +178,7 @@ class Stripes(Accelerator):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
 
     def _calc_tile_fc(self, w_dim, o_dim):
@@ -297,10 +297,10 @@ class Stripes(Accelerator):
         num_w_sram_wr = math.ceil(cw * w_prec / w_sram_min_wr_bw) * (k**2) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw * batch_size
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw 
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow 
         energy_o_sram_wr = num_o_sram_wr * i_sram_wr_cost
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
@@ -324,10 +324,10 @@ class Stripes(Accelerator):
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw)  * token_num
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw)  * token_num
         if token_num == 1: # CNN last FC layer
             energy_o_sram_wr = 0
         else:
@@ -437,8 +437,8 @@ class Stripes(Accelerator):
                     _, oh ,ow, _ = o_dim
                     
                     self._w_mem_required[name] = math.ceil(cw * w_prec / 8) * k**2 * cout
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw 
+                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow 
                 else:
                     # input channel, output channel
                     cin, cout = w_dim
@@ -446,11 +446,11 @@ class Stripes(Accelerator):
                     batch_size, token_num, _ = o_dim
 
                     self._w_mem_required[name] = math.ceil(cin * w_prec / 8) * cout
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * token_num
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8)  * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
                     else:
-                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * batch_size * token_num
+                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
 
     def _calc_num_mem_refetch(self):
         # If the on-chip buffer size is not big enough, 

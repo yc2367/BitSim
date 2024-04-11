@@ -31,9 +31,9 @@ class Bitwave(Stripes):
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, model, init_mem=False)
+        self.model_q = self._get_quantized_model() # quantized model
 
         self.en_bitflip = en_bitflip
-        self.model_q = MODEL[model_name].cpu() # quantized model
         # supported dataflow in BitWave
         # every tuple indicates (pe_dotprod_size, pe_array_height, pe_array_width)
         self.dataflow = [(8, 32, 16), (16, 32, 8), (32, 32, 4), (128, 8, 1), 
@@ -163,7 +163,7 @@ class Bitwave(Stripes):
         cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
     
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim, dataflow):
@@ -212,7 +212,7 @@ class Bitwave(Stripes):
         cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
 
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim, dataflow):
@@ -301,7 +301,7 @@ class Bitwave(Stripes):
         tile_oh    = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
     
     def _calc_tile_dwconv(self, w_dim, i_dim, o_dim, dataflow):
@@ -327,7 +327,7 @@ class Bitwave(Stripes):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
 
     def _calc_tile_fc(self, w_dim, o_dim, dataflow):
@@ -455,8 +455,8 @@ class Bitwave(Stripes):
                     _, oh ,ow, _ = o_dim
                     
                     self._w_mem_required[name] = math.ceil(cw / 8) * w_prec * k**2 * cout
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * ih * iw 
+                    self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * oh * ow 
                 else:
                     # input channel, output channel
                     cin, cout = w_dim
@@ -464,21 +464,19 @@ class Bitwave(Stripes):
                     batch_size, sample_size, _ = o_dim
 
                     self._w_mem_required[name] = math.ceil(cin / 8) * w_prec * cout
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8) * batch_size * sample_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8)  * sample_size
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
                     else:
-                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8) * batch_size * sample_size
+                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * sample_size
                         
     def _get_quantized_weight(self, layer_name):
-        for name, layer in self.model_q.named_modules():
+        for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                w = layer.weight()
-                wq = torch.int_repr(w)
-                wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
-                if len(wqb_twosComplement.shape) == 5:
-                    wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
-                return wqb_twosComplement
+                wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(wqb_signMagnitude.shape) == 5:
+                    wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
+                return wqb_signMagnitude
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
     
     def _init_mem(self):

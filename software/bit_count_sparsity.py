@@ -31,7 +31,7 @@ def extract_weight_tensor(model_name: str):
 
 def main():
     weight_tensor_dict = extract_weight_tensor(model_name)
-    GROUP_SIZE = 16
+    GROUP_SIZE = 8
     w_bitwidth = 8
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,12 +102,12 @@ def main():
                     sparse_bit_count_sm += layer_sparse_bit
                     total_bit_count_model += layer_total_bit
                 elif func == 2:
-                    format = 'Skip 0 col, Sign Mag'
+                    format = 'Skip bbs col, 2s Comp'
                     if len(weight_test.shape) == 4 and weight_test.shape[1] != 1:
-                        layer_sparse_bit = count_zero_column.count_zero_column_conv(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit = count_bbs_column_conv(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
                     elif len(weight_test.shape) == 2 and weight_test.shape[1] != 1:
-                        layer_sparse_bit = count_zero_column.count_zero_column_fc(weight_test, w_bitwidth=w_bitwidth, 
+                        layer_sparse_bit = count_bbs_column_fc(weight_test, w_bitwidth=w_bitwidth, 
                                                                 group_size=GROUP_SIZE, device=device)
                     sparse_bit_count_skip_0_col_sm += layer_sparse_bit
                 elif func == 3:
@@ -161,7 +161,7 @@ def main():
     print(line)
     file.writelines(f'{line} \n')
 
-    format = 'Skip 0 col, Sign Mag'
+    format = 'Skip bbs col, 2s Comp'
     line = f'{format.ljust(25)} Total sparse bit count: {sparse_bit_count_skip_0_col_sm}'
     print(line)
     file.writelines(f'{line} \n')

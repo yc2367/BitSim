@@ -27,9 +27,9 @@ class Pragmatic(Stripes):
                  pe_array_dim: List[int],
                  model_name: str,
                  model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
-        self.model_q = MODEL[model_name].cpu() # quantized model
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, model)    
+        self.model_q = self._get_quantized_model() # quantized model
 
     def calc_cycle(self):
         self._calc_compute_cycle()
@@ -130,10 +130,10 @@ class Pragmatic(Stripes):
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
 
-        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
-        num_total_op = num_total_op_kernel  * cycle_ow * cycle_oh * batch_size
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel  * cycle_ow * cycle_oh 
         self.num_eff_op += num_eff_op
         self.num_total_op += num_total_op
         return total_cycle
@@ -184,10 +184,10 @@ class Pragmatic(Stripes):
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
 
-        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
-        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh * batch_size
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh 
         self.num_eff_op += num_eff_op
         self.num_total_op += num_total_op
         return total_cycle
@@ -240,10 +240,8 @@ class Pragmatic(Stripes):
         return total_cycle
     
     def _get_quantized_weight(self, layer_name):
-        for name, layer in self.model_q.named_modules():
+        for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                w = layer.weight()
-                wq = torch.int_repr(w)
                 wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])

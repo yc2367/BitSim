@@ -1,13 +1,10 @@
 from sim.pragmatic import Pragmatic 
-from model_profile.models.models import MODEL
 
-name_list = ['resnet18', 'resnet50', 'mobilenet_v2']
+name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
 
 if __name__ == "__main__":
-    for i in range(3):
-        name = name_list[i]
-        model = MODEL[name]
-        model = model()
+    for name in name_list:
+        model = None
         acc = Pragmatic(8, 8, 16, [16, 16], name, model)
         
         total_cycle    = acc.calc_cycle()
@@ -18,6 +15,7 @@ if __name__ == "__main__":
         onchip_energy  = compute_energy + sram_rd_energy + sram_wr_energy
         total_energy   = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
         
+        print(f'model name: {name}')
         print(f'total cycle:        {total_cycle}')
         print(f'Multiplier util:    {acc.num_eff_op / acc.num_total_op}')
         print(f'weight buffer area: {acc.w_sram.area} mm2')

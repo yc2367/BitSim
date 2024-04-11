@@ -110,7 +110,7 @@ class Bitlet(Stripes):
         cycle_oh    = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
     
     def _calc_dwconv_cycle(self, layer_name, w_dim, i_dim, o_dim):
@@ -156,7 +156,7 @@ class Bitlet(Stripes):
         cycle_oh = oh
 
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
         return total_cycle
 
     def _calc_fc_cycle(self, layer_name, w_dim, o_dim):

@@ -1,12 +1,10 @@
 from sim.stripes import Stripes 
 
-name_list = ['resnet34', 'resnet50', 'vit-small', 'vit-base']
-
-idx = 0
+name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
 
 if __name__ == "__main__":
-    for i in range(idx, idx+1):
-        name = name_list[i]
+    for name in name_list:
+        model = None
         acc = Stripes(8, 8, 16, [16, 16], name, None)
 
         total_cycle    = acc.calc_cycle()

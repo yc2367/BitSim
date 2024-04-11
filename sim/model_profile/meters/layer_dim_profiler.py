@@ -37,17 +37,25 @@ class LayerDim:
                 weight_dim[layer_name] = [k, k, ci, co]
                 input_dim[layer_name]  = [bi, wi, hi, ci]
                 output_dim[layer_name] = [bo, ho, wo, co]
-            elif ('fc' in layer_name) or ('proj' in layer_name) or \
-                ('qkv' in layer_name) or ('classifier' in layer_name):
+            elif ('fc' in layer_name) or ('classifier' in layer_name) or \
+                ('proj' in layer_name) or ('qkv' in layer_name):
                 layer_name_list.append(layer_name)
-                if len(layer_dim['x_shape']) == 2: # CNN
+                if len(layer_dim['x_shape']) == 2: # CNN FC
                     bi, ci = layer_dim['x_shape']
                     bo, co = layer_dim['z_shape']
 
                     weight_dim[layer_name] = [ci, co]
                     input_dim[layer_name] = [bi, 1, ci]
                     output_dim[layer_name] = [bo, 1, co]
-                else:
+                elif len(layer_dim['y_shape']) == 4: # CNN Conv
+                    bi, ci, hi, wi = layer_dim['x_shape']
+                    bo, co, ho, wo = layer_dim['z_shape']
+                    _, _, k, _ = layer_dim['y_shape']
+
+                    weight_dim[layer_name] = [k, k, ci, co]
+                    input_dim[layer_name]  = [bi, wi, hi, ci]
+                    output_dim[layer_name] = [bo, ho, wo, co]
+                else: # transformer FC
                     bi, si, ci = layer_dim['x_shape']
                     bo, so, co = layer_dim['z_shape']
 

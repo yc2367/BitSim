@@ -35,5 +35,19 @@ class Accelerator:
 
         self.layer_name_list = dim_profiler.layer_name_list
     
+    def _get_quantized_model(self):
+        model_q = {}
+        base_path = '/home/yc2367/BitVert_DNN'
+        model_config_path = f'{base_path}/Baseline_Int8/{self.model_name}'
+        tensor_path = f'{model_config_path}/tensors'
+
+        for name in self.layer_name_list:
+            w_tensor_file = f'{tensor_path}/{name}.ops_x2.pt'
+            w_tensor = torch.load(w_tensor_file)
+            if len(w_tensor.shape) == 2: # transpose fully-connected layer
+                w_tensor = w_tensor.permute(1, 0)
+            model_q[name] = w_tensor
+        return model_q
+
     def _init_mem(self):
         raise NotImplementedError('ERROR! No implementation of function _init_mem()')
