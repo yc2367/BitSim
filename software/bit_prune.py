@@ -2,6 +2,7 @@ import torch, torchvision
 import torch.nn as nn
 from util.bitflip_layer import *
 import time
+import csv
 import argparse
 
 from torchvision.models.quantization import (ResNet18_QuantizedWeights, 
@@ -37,13 +38,23 @@ for n, m in model.named_modules():
         weight_list.append(wint)
         name_list.append(n)
 
-GROUP_SIZE = 16
+GROUP_SIZE = 32
 w_bitwidth = 8
 num_col_pruned = 4
+
+loss = 1
+if loss == 0:
+    metric = 'MSE'
+else: 
+    metric = 'KL_DIV'
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.MSELoss()
+    bitwave_loss = []
+    bitvert_loss_ra = []
+    bitvert_loss_zp = []
+    
     for N in range(num_col_pruned, num_col_pruned+1):
         pruned_column_num = N
         file = open(f'{model_name}_loss_report_g{GROUP_SIZE}_c{pruned_column_num}.txt', 'w')
@@ -98,10 +109,24 @@ def main():
                 weight_original = weight_test.to(dtype=torch.float, device=device)
                 weight_new = weight_test_new.to(device)
 
-                loss = criterion(weight_original, weight_new)
+                if metric == 'MSE':
+                    criterion = nn.MSELoss()
+                    loss = criterion(weight_original, weight_new)
+                else:
+                    criterion = nn.KLDivLoss();
+                    weight_original = F.log_softmax(weight_original.reshape(-1), dim=0)
+                    weight_new = F.softmax(weight_new.reshape(-1), dim=0)
+                    loss = criterion(weight_original, weight_new)
+                
+                if func == 0:
+                    bitwave_loss.append(loss)
+                elif func == 1:
+                    bitvert_loss_ra.append(loss)
+                elif func == 2:
+                    bitvert_loss_zp.append(loss)
                 #print(f'{format}: MSE loss between new weight and original weight is {loss}')
-                print(f'{format.ljust(20)} MSE: {loss}')
-                file.writelines(f'{format.ljust(20)} MSE: {loss} \n')
+                print(f'{format.ljust(20)} {metric.ljust(8)}: {loss}')
+                file.writelines(f'{format.ljust(20)} {metric.ljust(8)}: {loss} \n')
             print()
             file.writelines('\n')
         file.close()
@@ -109,6 +134,15 @@ def main():
         end = time.time()
         print(f'It took {end - start} seconds!')
 
-                    
+        print('BitWave Min Loss: ', min(bitwave_loss))
+        print('BitVert-RA Min Loss: ', min(bitvert_loss_ra))
+        print('BitVert-ZP Min Loss: ', min(bitvert_loss_zp))
+        loss_comparison = [bitwave_loss, bitvert_loss_ra, bitvert_loss_zp]
+        with open('bitwave_bitvert_loss_comparison.txt', 'w') as f:
+            write = csv.writer(f)
+            write.writerows(loss_comparison)
+
+
+
 if __name__ == "__main__":
     main()
