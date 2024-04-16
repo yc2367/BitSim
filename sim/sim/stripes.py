@@ -25,7 +25,6 @@ class Stripes(Accelerator):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
                  init_mem: bool=True): 
         assert len(pe_array_dim) == 2, \
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
@@ -33,7 +32,7 @@ class Stripes(Accelerator):
         self.pe_dotprod_size = pe_dotprod_size
         pe = BitSerialPE(input_precision_s, input_precision_p, 
                          pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
-        super().__init__(pe, pe_array_dim, model_name, model)
+        super().__init__(pe, pe_array_dim, model_name)
 
         self.cycle_compute = None
         if init_mem:

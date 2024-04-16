@@ -7,7 +7,6 @@ from sim.stripes import Stripes
 from hw.mem.mem_instance import MemoryInstance
 from hw.alu.alu_unit import BitSerialPE
 
-from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_signMagnitude
 
 # Bitwave accelerator
@@ -25,12 +24,11 @@ class Bitwave(Stripes):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
                  layer_prec: Dict={},    # the precision of every layer
                  en_bitflip: bool=False  # whether enable bitflip
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model, init_mem=False)
+                         pe_array_dim, model_name, init_mem=False)
         self.model_q = self._get_quantized_model() # quantized model
 
         self.en_bitflip = en_bitflip

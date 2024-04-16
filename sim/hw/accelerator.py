@@ -14,8 +14,7 @@ class Accelerator:
     def __init__(self, 
                  pe: PE,
                  pe_array_dim: List[int],
-                 model_name: str,
-                 model: nn.Module):
+                 model_name: str):
         self.model_name     = model_name
         self.pe             = pe
         self.pe_array_dim   = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}

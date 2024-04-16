@@ -6,7 +6,7 @@ name = name_list[0]
 
 if __name__ == "__main__":
     for en_ol_channel in [ True]:
-        acc = BitVert(8, 8, 32, [16, 16], name, None, 
+        acc = BitVert(8, 8, 32, [16, 16], name, 
                     en_b2s=True, en_lsb_pruning=False, en_ol_channel=en_ol_channel)
 
         total_cycle    = acc.calc_cycle()

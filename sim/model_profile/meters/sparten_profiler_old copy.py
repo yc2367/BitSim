@@ -41,10 +41,6 @@ class SpartenProfiler(Profiler):
         super().__init__(name, model, device, self.input_size, precision) 
         self.model_q = MODEL[name].cpu() # quantized model
         self.save_dir = args.sparten_save_dir
-        # @self.is_linear_batch: whether the linear layer receives an input batch
-        # if True, it means there is a batch of inputs (e.g. for CNNs)
-        # else, it means the linear layer batch_size dimension contains multiple patches or samples
-        self.is_linear_batch = args.is_linear_batch 
         self.group_size = group_size
          
         self.layer_name_list = []
@@ -87,7 +83,7 @@ class SpartenProfiler(Profiler):
         file_num_zero_input  = save_dir + f'/{model_name}_num_zero_input.pickle'
         file_num_zero_output = save_dir + f'/{model_name}_num_zero_output.pickle'
         file_num_zero_weight = save_dir + f'/{model_name}_file_num_zero_weight.pickle'
-        file_num_eff_ops    = save_dir + f'/{model_name}_file_num_eff_ops.pickle'
+        file_num_eff_ops     = save_dir + f'/{model_name}_file_num_eff_ops.pickle'
         dict_exists = os.path.isfile(file_num_zero_input) and \
                         os.path.isfile(file_num_zero_output) and \
                         os.path.isfile(file_num_zero_weight) and \
@@ -123,7 +119,7 @@ class SpartenProfiler(Profiler):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight_quantized = self._get_quantized_weight(name)
-        bi, _,  _, _ = i_feature.shape
+        bi, _, _, _ = i_feature.shape
 
         self.num_zero_weight[name] = round(torch.sum(weight_quantized == 0).item())
         self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
@@ -138,7 +134,10 @@ class SpartenProfiler(Profiler):
         weight_quantized = self._get_quantized_weight(name)
 
         # size
-        bi, _  = i_feature.shape
+        if len(i_feature.shape) == 2:
+            bi, _  = i_feature.shape
+        else:
+            bi, _, _  = i_feature.shape
 
         self.num_zero_input[name]  = round(torch.sum(i_feature == 0).item() / bi)
         self.num_zero_output[name] = round(torch.sum(o_feature == 0).item() / bi)
@@ -171,9 +170,9 @@ class SpartenProfiler(Profiler):
                     kernel = kernel.unsqueeze(-1).reshape([num_groups, group_size])
                     kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1, -1)
                     i_feature = i_feature.unsqueeze(-1).reshape([bi, oh*ow, num_groups, group_size])
-                    non_zero = ((i_feature * kernel) != 0)
-                    num_non_zero = torch.sum(non_zero, dim=-1)
-                    num_eff_ops[:, j_cout, :, :, :] = num_non_zero.reshape((bi, oh, ow, num_groups))
+                    not_zero = ((i_feature * kernel) != 0)
+                    num_not_zero = torch.sum(not_zero, dim=-1)
+                    num_eff_ops[:, j_cout, :, :, :] = num_not_zero.reshape((bi, oh, ow, num_groups))
                 else:
                     kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, oh*ow, -1)
                     for j_group in range(num_groups):
@@ -182,22 +181,22 @@ class SpartenProfiler(Profiler):
                         u_j_group = (j_group+1) * group_size
                         i_patch = i_feature[:, :, l_j_group:u_j_group]
                         w_patch = kernel[:, :, l_j_group:u_j_group]
-                        non_zero = ((i_patch * w_patch) != 0)
-                        num_non_zero = torch.sum(non_zero, dim=-1)
-                        num_eff_ops[:, j_cout, :, :, j_group] = num_non_zero.unsqueeze(1).reshape((bi, oh, ow))
+                        not_zero = ((i_patch * w_patch) != 0)
+                        num_not_zero = torch.sum(not_zero, dim=-1)
+                        num_eff_ops[:, j_cout, :, :, j_group] = num_not_zero.unsqueeze(1).reshape((bi, oh, ow))
         else: # depthwise
             num_eff_ops = torch.zeros([bo, cout, oh, ow])
             unfold = nn.Unfold(kernel_size=layer.kernel_size, padding=layer.padding, stride=layer.stride)
             for j_cout in range(cout): # output channel dimension
                 image_channel = unfold(i_feature[:, j_cout].unsqueeze(1))
                 kernel = weight[j_cout].flatten().unsqueeze(-1).unsqueeze(0).expand(bi, -1, oh*ow)
-                non_zero = ((image_channel * kernel) != 0)
-                num_non_zero = torch.sum(non_zero, dim=1)
-                num_eff_ops[:, j_cout, :, :] = num_non_zero.unsqueeze(-1).reshape((bi, oh, ow))
+                not_zero = ((image_channel * kernel) != 0)
+                num_not_zero = torch.sum(not_zero, dim=1)
+                num_eff_ops[:, j_cout, :, :] = num_not_zero.unsqueeze(-1).reshape((bi, oh, ow))
             num_eff_ops = num_eff_ops.unsqueeze(-1)
         self.num_eff_ops[name] = torch.round(torch.mean(num_eff_ops, dim=0))
         
-    def _calc_eff_ops_linear(self, layer: nn.Linear, name:str, is_linear_batch: bool=False):
+    def _calc_eff_ops_linear(self, layer: nn.Linear, name:str):
         i_feature = self.feature_dict[name][0]
         o_feature = self.feature_dict[name][1]
         weight = layer.weight
@@ -209,6 +208,7 @@ class SpartenProfiler(Profiler):
             bo, cout = o_feature.shape
             si = 1
             so = 1
+            i_feature = i_feature.unsqueeze(1) # dim: [batch_size, sample_size, input feature]
         elif len(i_feature.shape) == 3:
             bi, si, cin = i_feature.shape
             bo, so, cout = o_feature.shape
@@ -218,7 +218,6 @@ class SpartenProfiler(Profiler):
         assert bi == bo, 'ERROR! Batch size is not the same for input feature and output feature!'
 
         num_groups = math.ceil(cin / group_size) 
-        num_eff_ops = torch.zeros([bo, so, cout, num_groups])
         is_integer_num_group = (cin % group_size) == 0
 
         # count number of zero operations for every group
@@ -226,25 +225,22 @@ class SpartenProfiler(Profiler):
             kernel = weight.unsqueeze(-1).reshape([cout, num_groups, group_size])
             kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, si, -1, -1, -1)
             i_feature = i_feature.unsqueeze(-1).reshape([bi, si, num_groups, group_size])
-            i_feature = i_feature.unsqueeze(1).expand([-1, cout, -1, -1])
-            non_zero = ((i_feature * kernel) != 0)
-            num_eff_ops = torch.sum(non_zero, dim=-1).to(torch.float32)
+            i_feature = i_feature.unsqueeze(1).expand([-1, -1, cout, -1, -1])
+            not_zero = ((i_feature * kernel) != 0)
+            num_eff_ops = torch.sum(not_zero, dim=-1).to(torch.float32)
         else:
-            i_feature = i_feature.unsqueeze(1).expand(-1, cout, -1)
-            kernel  = weight.unsqueeze(0).expand(bi, -1, -1)
+            num_eff_ops = torch.zeros([bo, so, cout, num_groups])
+            i_feature = i_feature.unsqueeze(1).expand(-1, -1, cout, -1)
+            kernel  = weight.unsqueeze(0).unsqueeze(0).expand(bi, si, -1, -1)
             for j_group in range(num_groups):
                 # divide the dot-product into groups of group_size
                 l_j_group = j_group * num_groups
                 u_j_group = (j_group+1) * num_groups
-                i_patch = i_feature[:, :, l_j_group:u_j_group]
-                w_patch = kernel[:, :, l_j_group:u_j_group]
-                non_zero = ((i_patch * w_patch) != 0)
-                num_eff_ops[:, :, j_group] = torch.sum(non_zero, dim=-1).to(torch.float32)
-        if is_linear_batch:
-            num_eff_ops = torch.round(torch.mean(num_eff_ops, dim=0))
-            self.num_eff_ops[name] = num_eff_ops.unsqueeze(0)
-        else:
-            self.num_eff_ops[name] = num_eff_ops
+                i_patch = i_feature[:, :, :, l_j_group:u_j_group]
+                w_patch = kernel[:, :, :, l_j_group:u_j_group]
+                not_zero = ((i_patch * w_patch) != 0)
+                num_eff_ops[:, :, :, j_group] = torch.sum(not_zero, dim=-1).to(torch.float32)
+        self.num_eff_ops[name] = torch.round(torch.mean(num_eff_ops, dim=0))
 
     def _get_quantized_weight(self, layer_name):
         for name, layer in self.model_q.named_modules():

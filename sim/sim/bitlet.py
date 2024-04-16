@@ -7,7 +7,6 @@ from typing import List
 
 from hw.mem.mem_instance import MemoryInstance
 from sim.stripes import Stripes
-from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_twosComplement
 
 # Bitlet accelerator
@@ -26,10 +25,9 @@ class Bitlet(Stripes):
                  input_precision_p: int, # bit-parallel operand precision
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
-                 model_name: str,
-                 model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
+                 model_name: str): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)
+                         pe_array_dim, model_name)
         self.model_q = self._get_quantized_model() # quantized model
     
     def calc_cycle(self):

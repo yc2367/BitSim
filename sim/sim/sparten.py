@@ -21,7 +21,6 @@ class Sparten(Accelerator):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
                  args):
         assert len(pe_array_dim) == 2, \
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
@@ -30,11 +29,11 @@ class Sparten(Accelerator):
         (self.i_num_zero, 
          self.o_num_zero, 
          self.w_num_zero, 
-         self.num_eff_ops) = self._get_sparse_info(model_name, model, pe_dotprod_size, args)
+         self.num_eff_ops) = self._get_sparse_info(model_name, pe_dotprod_size, args)
         
         pe = PE([input_precision, input_precision], 
                 pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
-        super().__init__(pe, pe_array_dim, model_name, model)
+        super().__init__(pe, pe_array_dim, model_name)
         self._calc_eff_ops()
 
         self._init_mem()
@@ -510,8 +509,8 @@ class Sparten(Accelerator):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
-    def _get_sparse_info(self, model_name, model, group_size, args):
-        zero_ops_profiler = SpartenProfiler(model_name, model, group_size, args=args, device=self.DEVICE)
+    def _get_sparse_info(self, model_name, group_size, args):
+        zero_ops_profiler = SpartenProfiler(model_name, group_size, args=args, device=self.DEVICE)
         zero_ops_profiler.fit()
         return (zero_ops_profiler.num_zero_input, 
                 zero_ops_profiler.num_zero_output, 

@@ -17,7 +17,7 @@ def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, nu
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -79,7 +79,7 @@ def bitflip_signMagnitude_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_
     if C < group_size:
         group_size = C
     NUM_GROUP = K*C//group_size
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -142,7 +142,7 @@ def colAvg_twosComplement_conv(wq_int, w_bitwidth: int=8, group_size: int=16, nu
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -179,7 +179,7 @@ def colAvg_twosComplement_fc(wq_int, w_bitwidth: int=8, group_size: int=16, num_
     if C < group_size:
         group_size = C
     NUM_GROUP = K*C//group_size
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -218,7 +218,7 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     # clipping threshold
     v_max = 2.**(w_bitwidth-1) - 1
@@ -300,7 +300,7 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
     if C < group_size:
         group_size = C
     NUM_GROUP = K*C//group_size
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     # clipping threshold
     v_max = 2.**(w_bitwidth-1) - 1
@@ -457,7 +457,7 @@ def colAvg_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     # clipping threshold
     v_max = 2.**(w_bitwidth-1) - 1

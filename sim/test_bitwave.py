@@ -5,8 +5,7 @@ name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
 
 if __name__ == "__main__":
     for name in name_list:
-        model = None
-        acc = Bitwave(8, 8, 8, [32, 16], name, model, layer_prec={}, en_bitflip=True)
+        acc = Bitwave(8, 8, 8, [32, 16], name, layer_prec={}, en_bitflip=True)
         
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

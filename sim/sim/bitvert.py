@@ -1,12 +1,12 @@
 import math, time
 import torch
 import torch.nn as nn
+import numpy as np
 
 from typing import List, Dict
 from sim.stripes import Stripes
 from hw.mem.mem_instance import MemoryInstance
 from model_profile.meters.bitvert_profiler import BitVertProfiler
-from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_twosComplement
 
 # Bitwave accelerator
@@ -27,13 +27,12 @@ class BitVert(Stripes):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
                  en_b2s:         bool=False,
                  en_lsb_pruning: bool=False, # whether enable LSB column pruning using bi-directional bit sparsity
                  en_ol_channel:  bool=False  # whether enable outlier channel groupping
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model, init_mem=False)
+                         pe_array_dim, model_name, init_mem=False)
                 
         if en_lsb_pruning or en_ol_channel:
             self.en_b2s = True
@@ -54,17 +53,31 @@ class BitVert(Stripes):
             (prec_high, prec_high_ratio) = self.w_prec_config[name][0]
             (prec_low,  prec_low_ratio)  = self.w_prec_config[name][1]
             self.w_prec_eff[name] = prec_high*prec_high_ratio + prec_low*prec_low_ratio
+        
+        self._print_prec_eff()
 
         self._init_mem()
         self._check_layer_mem_size()
         self._calc_num_mem_refetch()
     
+    def _print_prec_eff(self):
+        total_bit = 0
+        eff_bit = 0
+        for name in self.layer_name_list:
+            layer_param = np.prod(self.weight_dim[name])
+            total_bit += (layer_param * self.pe.input_precision_p) 
+            eff_bit += (layer_param * self.w_prec_eff[name])
+        print(f'eff bits:      {eff_bit}')
+        print(f'total bits:    {total_bit}')
+        print(f'eff precision: {eff_bit / total_bit * self.pe.input_precision_p}')
+        print('\n')
+
     def _calc_w_prec_config(self):
         w_prec_config = {}
         profiler = BitVertProfiler(self.model_name)
         nonzero_channel = profiler.nonzero_channels
         prec_h = self.pe.input_precision_p
-        prec_l = 4
+        prec_l = 4.
         for name in self.layer_name_list:
             # format for a layer configuration: [(prec_high, % of channel), (prec_low, % of channel)]
             if (not self.en_lsb_pruning) and (not self.en_ol_channel):
@@ -80,7 +93,11 @@ class BitVert(Stripes):
                     tmp_name = name.rstrip('.conv')
                 else:
                     tmp_name = name
-                num_outlier_channel = len(nonzero_channel[tmp_name])
+
+                if tmp_name in nonzero_channel.keys():
+                    num_outlier_channel = len(nonzero_channel[tmp_name])
+                else:
+                    num_outlier_channel = 0
                 prec_high_ratio = num_outlier_channel / num_total_channel
                 w_prec_config[name] = [(prec_h, prec_high_ratio), (prec_l, 1 - prec_high_ratio)]
         return w_prec_config

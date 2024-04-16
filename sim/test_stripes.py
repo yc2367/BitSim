@@ -4,8 +4,7 @@ name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
 
 if __name__ == "__main__":
     for name in name_list:
-        model = None
-        acc = Stripes(8, 8, 16, [16, 16], name, None)
+        acc = Stripes(8, 8, 16, [16, 16], name)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6
