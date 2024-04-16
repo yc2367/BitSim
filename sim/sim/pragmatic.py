@@ -228,7 +228,7 @@ class Pragmatic(Stripes):
 
                 num_eff_op_kernel += torch.sum(tile_cin).item()
                 num_total_op_kernel += (cycle_tile_cin * pe_group_size)
-        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
+        cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
 
         num_eff_op = num_eff_op_kernel * cycle_batch

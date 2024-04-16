@@ -13,7 +13,7 @@ from sim.util.bin_int_convert import int_to_twosComplement
 class BitVert(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.41 * PR_SCALING # energy per 32-way DP PE, multiplied by 1.5 to account for post P&R
+    PE_ENERGY = 0.25 * PR_SCALING # energy per 16-way DP PE, multiplied by 1.5 to account for post P&R
     #PE_ENERGY = 0.28 * PR_SCALING # energy per 16-way DP PE, multiplied by 1.5 to account for post P&R
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_REG_ENERGY_PER_ROW = 1.205 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
@@ -28,21 +28,14 @@ class BitVert(Stripes):
                  pe_array_dim: List[int],
                  model_name: str,
                  en_b2s:         bool=False,
-                 en_lsb_pruning: bool=False, # whether enable LSB column pruning using bi-directional bit sparsity
-                 en_ol_channel:  bool=False  # whether enable outlier channel groupping
+                 en_lsb_pruning: bool=False,  # whether enable LSB column pruning using bi-directional bit sparsity
+                 en_ol_channel:  bool=False,  # whether enable outlier channel groupping
+                 en_eager_compression: bool=False  # whether enable eager compression
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, init_mem=False)
                 
-        if en_lsb_pruning or en_ol_channel:
-            self.en_b2s = True
-        else:
-            self.en_b2s = en_b2s
-        if en_ol_channel:
-            self.en_lsb_pruning = False
-        else: 
-            self.en_lsb_pruning = en_lsb_pruning
-        self.en_ol_channel = en_ol_channel
+        self._init_computation_mode(en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression)
 
         # to be modified later
         self.w_prec_config = self._calc_w_prec_config()
@@ -54,13 +47,31 @@ class BitVert(Stripes):
             (prec_low,  prec_low_ratio)  = self.w_prec_config[name][1]
             self.w_prec_eff[name] = prec_high*prec_high_ratio + prec_low*prec_low_ratio
         
-        self._print_prec_eff()
-
         self._init_mem()
         self._check_layer_mem_size()
         self._calc_num_mem_refetch()
     
-    def _print_prec_eff(self):
+    def _init_computation_mode(self, en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression):
+        if en_lsb_pruning or en_ol_channel:
+            self.en_b2s = True
+        else:
+            self.en_b2s = en_b2s
+        if en_ol_channel:
+            self.en_lsb_pruning = False
+        else: 
+            self.en_lsb_pruning = en_lsb_pruning
+        self.en_ol_channel = en_ol_channel
+        self.en_eager_compression = en_eager_compression
+
+        if en_ol_channel:
+            if en_eager_compression:
+                self.prec_low = 4.
+            else:
+                self.prec_low = 6.
+        else:
+            self.prec_low = 8
+
+    def print_prec_eff(self):
         total_bit = 0
         eff_bit = 0
         for name in self.layer_name_list:
@@ -70,14 +81,14 @@ class BitVert(Stripes):
         print(f'eff bits:      {eff_bit}')
         print(f'total bits:    {total_bit}')
         print(f'eff precision: {eff_bit / total_bit * self.pe.input_precision_p}')
-        print('\n')
 
     def _calc_w_prec_config(self):
         w_prec_config = {}
-        profiler = BitVertProfiler(self.model_name)
+        profiler = BitVertProfiler(self.model_name, self.en_eager_compression)
         nonzero_channel = profiler.nonzero_channels
         prec_h = self.pe.input_precision_p
-        prec_l = 4.
+        prec_l = self.prec_low
+
         for name in self.layer_name_list:
             # format for a layer configuration: [(prec_high, % of channel), (prec_low, % of channel)]
             if (not self.en_lsb_pruning) and (not self.en_ol_channel):
@@ -329,7 +340,7 @@ class BitVert(Stripes):
                 else:
                     cycle_tile_cin = prec_high
                 cycle_kernel += int(cycle_tile_cin)
-        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
+        cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
     

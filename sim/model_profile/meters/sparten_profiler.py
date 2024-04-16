@@ -89,7 +89,7 @@ class SpartenProfiler(object):
                         os.path.isfile(file_num_eff_ops)
         if create_new_dict or (not dict_exists):
             for name in self.layer_name_list:
-                if 'conv' in name:
+                if len(self.weight_dim[name]) == 4:
                     self._calc_zero_value_conv(name)
                     self._calc_eff_ops_conv(name)
                 else:
@@ -150,17 +150,14 @@ class SpartenProfiler(object):
         _, cin, _, k = weight_q.shape
         # padding, stride
         stride = ih // oh
-        padding = oh * stride - stride + k - ih
-        print(i_feature.shape, o_feature.shape, weight_q.shape)
-        print(stride, padding)
-        print('\n')
+        padding = (oh * stride - stride + k - ih + 1) // 2
 
         # count number of zero operations for every group
         num_groups = math.ceil(k**2 * cin / group_size) 
         is_integer_num_group = ((k**2 * cin) % group_size) == 0
         if cin != 1: # conv2D
             num_eff_ops = torch.zeros([bo, cout, oh, ow, num_groups])
-            unfold = nn.Unfold(kernel_size=k, padding=padding, stride=stride)
+            unfold = nn.Unfold(kernel_size=k, padding=(padding, padding), stride=(stride, stride))
             i_feature = unfold(i_feature).permute([0, 2, 1])
             for j_cout in range(cout): # output channel dimension
                 kernel = weight_q[j_cout].flatten()
@@ -220,15 +217,15 @@ class SpartenProfiler(object):
 
         # count number of zero operations for every group
         if is_integer_num_group:
-            kernel = weight.unsqueeze(-1).reshape([cout, num_groups, group_size])
+            kernel = weight_q.unsqueeze(-1).reshape([cout, num_groups, group_size])
             kernel = kernel.unsqueeze(0).unsqueeze(0).expand(bi, si, -1, -1, -1)
             i_feature = i_feature.unsqueeze(-1).reshape([bi, si, num_groups, group_size])
-            i_feature = i_feature.unsqueeze(1).expand([-1, -1, cout, -1, -1])
+            i_feature = i_feature.unsqueeze(2).expand([-1, -1, cout, -1, -1])
             not_zero = ((i_feature * kernel) != 0)
             num_eff_ops = torch.sum(not_zero, dim=-1).to(torch.float32)
         else:
             num_eff_ops = torch.zeros([bo, so, cout, num_groups])
-            i_feature = i_feature.unsqueeze(1).expand(-1, -1, cout, -1)
+            i_feature = i_feature.unsqueeze(2).expand(-1, -1, cout, -1)
             kernel  = weight.unsqueeze(0).unsqueeze(0).expand(bi, si, -1, -1)
             for j_group in range(num_groups):
                 # divide the dot-product into groups of group_size

@@ -197,7 +197,7 @@ class Bitlet(Stripes):
 
                 cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))
                 cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
+        cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
     

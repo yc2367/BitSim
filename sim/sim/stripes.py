@@ -194,7 +194,7 @@ class Stripes(Accelerator):
         # tile_cout:  number of tiles along output channel
         tile_in_channel  = math.ceil(cin / pe_group_size)
         tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size * token_num / num_pe_col)
+        tile_batch       = math.ceil(token_num / num_pe_col)
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile

@@ -45,4 +45,5 @@ if __name__ == "__main__":
     print(f'dram energy:               {dram_energy} uJ')
     print(f'on-chip energy:            {onchip_energy} uJ')
     print(f'total energy:              {total_energy} uJ')
+    print('')
     

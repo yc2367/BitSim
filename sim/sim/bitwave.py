@@ -12,8 +12,9 @@ from sim.util.bin_int_convert import int_to_signMagnitude
 # Bitwave accelerator
 class Bitwave(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
+    RECONFIG_SCALING = 1.1 # scaling factor to account for BitWave's reconfigurable dataflow
     DISPATCHER_ENERGY_PER_COL = 0.072625 
-    PE_ENERGY = 0.2475 * PR_SCALING # energy per 8-way DP PE, multiplied by 1.3 to account for post P&R
+    PE_ENERGY = 0.2475 * PR_SCALING * RECONFIG_SCALING # energy per 8-way DP PE
     #PE_ENERGY = 0.30625 * PR_SCALING
     W_SCHEDULER_ENERGY_PER_ROW = 0.06575 * PR_SCALING # energy (pJ) of the weight scheduler for a PE row
     PE_AREA = 1
@@ -225,7 +226,7 @@ class Bitwave(Stripes):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
         # cycle_ow:     number of cycles along output width
@@ -250,7 +251,7 @@ class Bitwave(Stripes):
                     cycle_tile_cin = self.w_prec_config[layer_name] - 1
 
                 cycle_kernel += int(cycle_tile_cin)
-        cycle_batch = math.ceil(batch_size * sample_size / num_pe_col)
+        cycle_batch = math.ceil(token_num / num_pe_col)
 
         total_cycle = cycle_kernel * cycle_batch
         return total_cycle
@@ -336,13 +337,13 @@ class Bitwave(Stripes):
         # input channel, output channel
         cin, cout = w_dim
         # batch size, sample size, output channel
-        batch_size, sample_size, _ = o_dim
+        batch_size, token_num, _ = o_dim
 
         # tile_in_channel:   number of tiles along input channel
         # tile_cout:  number of tiles along output channel
         tile_in_channel  = math.ceil(cin / pe_group_size)
         tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size * sample_size / num_pe_col)
+        tile_batch       = math.ceil(token_num / num_pe_col)
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
@@ -459,14 +460,14 @@ class Bitwave(Stripes):
                     # input channel, output channel
                     cin, cout = w_dim
                     # batch size, sample size, output channel
-                    batch_size, sample_size, _ = o_dim
+                    batch_size, token_num, _ = o_dim
 
                     self._w_mem_required[name] = math.ceil(cin / 8) * w_prec * cout
-                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8)  * sample_size
+                    self._i_mem_required[name] = math.ceil(cin * i_prec / 8)  * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         self._o_mem_required[name] = 0
                     else:
-                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * sample_size
+                        self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
                         
     def _get_quantized_weight(self, layer_name):
         for name, wq in self.model_q.items():
