@@ -1,10 +1,20 @@
 from sim.ant import Ant 
 
-name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
+name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
 
 if __name__ == "__main__":
     for name in name_list:
-        acc = Ant(6, 6, 16, [16, 20], name)
+        if (name == 'vgg16'):
+            prec = 6.1
+        elif (name == 'resnet34'):
+            prec = 6.05
+        elif (name == 'resnet50'):
+            prec = 6.05
+        elif (name == 'bert-sst2'):
+            prec = 6.3
+        else:
+            prec = 6.05
+        acc = Ant(prec, prec, 16, [16, 20], name)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

@@ -63,14 +63,14 @@ class Ant(Stripes):
                         self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
 
     def _init_mem(self):
-        w_prec = 8
-        w_sram_bank = self.pe_array_dim['h'] * self.pe.input_precision_s / 8 
+        w_prec = 6
+        w_sram_bank = self.pe_array_dim['h'] * w_prec / 8 
         w_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 288 * 1024*8, 
+                            'size': 240 * 1024*8, 
                             'bank_count': w_sram_bank, 
-                            'rw_bw': (self.pe_dotprod_size * w_prec) * w_sram_bank, 
+                            'rw_bw': (self.pe_dotprod_size * 8) * w_sram_bank, 
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,
@@ -80,14 +80,14 @@ class Ant(Stripes):
                                      min_r_granularity=None, min_w_granularity=64,  
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
-        i_prec = 8
-        i_sram_bank = self.pe_array_dim['w'] * self.pe.input_precision_p / 8 
+        i_prec = 6
+        i_sram_bank = self.pe_array_dim['w'] * i_prec / 8 
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 240 * 1024*8, 
+                            'size': 270 * 1024*8, 
                             'bank_count': i_sram_bank, 
-                            'rw_bw': (self.pe_dotprod_size * i_prec) * i_sram_bank,
+                            'rw_bw': (self.pe_dotprod_size * 8) * i_sram_bank,
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,

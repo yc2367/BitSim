@@ -1,7 +1,7 @@
 from sim.bitlet import Bitlet 
 from model_profile.models.models import MODEL
 
-name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base']
+name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
 
 if __name__ == "__main__":
     for name in name_list:

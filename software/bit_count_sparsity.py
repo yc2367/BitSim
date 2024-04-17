@@ -22,8 +22,10 @@ def extract_weight_tensor(model_name: str):
     for layer_name, _ in layer_dim_list.items():
         if 'conv' in layer_name:
             weight_tensor_dict[layer_name] = torch.load(f'{tensor_path}/{layer_name}_x2.pt')
-        elif ('fc' in layer_name) or ('proj' in layer_name) or \
-            ('qkv' in layer_name) or ('classifier' in layer_name) :
+        elif ('fc' in layer_name) or ('classifier' in layer_name) or \
+                ('proj' in layer_name) or ('qkv' in layer_name) or \
+                ('query' in layer_name) or ('key' in layer_name) or \
+                ('value' in layer_name) or ('linear' in layer_name):
             weight_tensor_dict[layer_name] = torch.load(f'{tensor_path}/{layer_name}_x2.pt')
 
     return weight_tensor_dict

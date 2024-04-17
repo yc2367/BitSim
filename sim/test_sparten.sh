@@ -4,7 +4,7 @@ fi
 
 batch_size=128
 
-for model in vgg16 resnet34 resnet50 vit\-small vit\-base;
+for model in vgg16 resnet34 resnet50 vit\-small vit\-base bert\-mrpc bert\-sst2;
 do
     python3 -W ignore ./test_sparten.py \
         --model ${model} \

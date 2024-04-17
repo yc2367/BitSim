@@ -38,7 +38,9 @@ class LayerDim:
                 input_dim[layer_name]  = [bi, wi, hi, ci]
                 output_dim[layer_name] = [bo, ho, wo, co]
             elif ('fc' in layer_name) or ('classifier' in layer_name) or \
-                ('proj' in layer_name) or ('qkv' in layer_name):
+                ('proj' in layer_name) or ('qkv' in layer_name) or \
+                ('query' in layer_name) or ('key' in layer_name) or \
+                ('value' in layer_name) or ('linear' in layer_name):
                 layer_name_list.append(layer_name)
                 if len(layer_dim['x_shape']) == 2: # CNN FC
                     bi, ci = layer_dim['x_shape']

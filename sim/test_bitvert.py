@@ -7,7 +7,7 @@ if __name__ == "__main__":
     for name in name_list:
         acc = BitVert(8, 8, 16, [32, 16], name, 
                     en_b2s=True, en_lsb_pruning=False, 
-                    en_ol_channel=True, en_eager_compression=True)
+                    en_ol_channel=False, en_eager_compression=False)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

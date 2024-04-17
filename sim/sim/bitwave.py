@@ -26,7 +26,8 @@ class Bitwave(Stripes):
                  pe_array_dim: List[int],
                  model_name: str,
                  layer_prec: Dict={},    # the precision of every layer
-                 en_bitflip: bool=False  # whether enable bitflip
+                 en_bitflip: bool=False,  # whether enable bitflip
+                 en_config_dataflow: bool=True # whether enable configurable dataflow
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, init_mem=False)
@@ -35,8 +36,12 @@ class Bitwave(Stripes):
         self.en_bitflip = en_bitflip
         # supported dataflow in BitWave
         # every tuple indicates (pe_dotprod_size, pe_array_height, pe_array_width)
-        self.dataflow = [(8, 32, 16), (16, 32, 8), (32, 32, 4), (128, 8, 1), 
-                         (16, 64, 1), (32, 32, 1), (16, 1, 16)]
+        if en_config_dataflow:
+            self.dataflow = [(8, 32, 16), (16, 32, 8), (32, 32, 4), (128, 8, 1), 
+                            (16, 64, 1), (32, 32, 1), (16, 1, 16)]
+        else:
+            self.dataflow = [(16, 32, 8)]
+
         # to be modified later
         self.w_prec_config = {}
         for name in self.layer_name_list:
@@ -102,7 +107,8 @@ class Bitwave(Stripes):
     def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :, :, :]
+        start_bit = 8 - self.pe.input_precision_s
+        wq_b = wq_b[start_bit:, :, :, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_row = dataflow[1]
@@ -168,7 +174,8 @@ class Bitwave(Stripes):
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :, :, :]
+        start_bit = 8 - self.pe.input_precision_s
+        wq_b = wq_b[start_bit:, :, :, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_col = dataflow[2]
@@ -217,7 +224,8 @@ class Bitwave(Stripes):
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[1:, :, :]
+        start_bit = 8 - self.pe.input_precision_s
+        wq_b = wq_b[start_bit:, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_row = dataflow[1]

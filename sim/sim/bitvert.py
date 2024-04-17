@@ -34,12 +34,13 @@ class BitVert(Stripes):
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, init_mem=False)
+        self.model_q = self._get_quantized_model()
                 
         self._init_computation_mode(en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression)
 
         # to be modified later
         self.w_prec_config = self._calc_w_prec_config()
-
+        
         # effective weight precision
         self.w_prec_eff = {}
         for name in self.layer_name_list:
@@ -453,10 +454,8 @@ class BitVert(Stripes):
                         self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
 
     def _get_quantized_weight(self, layer_name):
-        for name, layer in self.model_q.named_modules():
+        for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                w = layer.weight()
-                wq = torch.int_repr(w)
                 wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
