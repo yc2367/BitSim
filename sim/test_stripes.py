@@ -4,7 +4,7 @@ name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrp
 
 if __name__ == "__main__":
     for name in name_list:
-        acc = Stripes(8, 8, 16, [16, 16], name)
+        acc = Stripes(8, 8, 16, [1, 16], name)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6
@@ -14,16 +14,19 @@ if __name__ == "__main__":
         onchip_energy  = compute_energy + sram_rd_energy + sram_wr_energy
         total_energy   = compute_energy + sram_rd_energy + sram_wr_energy + dram_energy
 
+        print_energy = False
         print(f'model: {name}')
         print(f'total cycle:        {total_cycle}')
-        print(f'weight buffer area: {acc.w_sram.area} mm2')
-        print(f'input buffer area:  {acc.i_sram.area} mm2')
-        print(f'compute energy:     {compute_energy} uJ')
-        print(f'sram rd energy:     {sram_rd_energy} uJ')
-        print(f'sram wr energy:     {sram_wr_energy} uJ')
-        print(f'dram energy:        {dram_energy} uJ')
-        print(f'on-chip energy:     {onchip_energy} uJ')
-        print(f'total energy:       {total_energy} uJ')
+
+        if print_energy:
+            print(f'weight buffer area: {acc.w_sram.area} mm2')
+            print(f'input buffer area:  {acc.i_sram.area} mm2')
+            print(f'compute energy:     {compute_energy} uJ')
+            print(f'sram rd energy:     {sram_rd_energy} uJ')
+            print(f'sram wr energy:     {sram_wr_energy} uJ')
+            print(f'dram energy:        {dram_energy} uJ')
+            print(f'on-chip energy:     {onchip_energy} uJ')
+            print(f'total energy:       {total_energy} uJ')
 
         print()
     

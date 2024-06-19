@@ -9,11 +9,11 @@ if __name__ == "__main__":
         elif (name == 'resnet34'):
             prec = 6.05
         elif (name == 'resnet50'):
-            prec = 6.05
-        elif (name == 'bert-sst2'):
-            prec = 6.3
+            prec = 6.2
+        elif (name == 'vit-small'):
+            prec = 6.5
         else:
-            prec = 6.05
+            prec = 6.1
         acc = Ant(prec, prec, 16, [16, 20], name)
 
         total_cycle    = acc.calc_cycle()

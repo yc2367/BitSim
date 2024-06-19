@@ -2,6 +2,27 @@ import torch
 import torch.nn as nn
 
 
+def int_to_binary(weight_q, w_bitwidth: int=8, device='cpu'):
+    weight_q = weight_q.clone()
+    
+    weight_q_shape = list(weight_q.size())
+    remainder_list = torch.zeros([w_bitwidth] + weight_q_shape, device=device)
+    for k in reversed(range(w_bitwidth)):
+        remainder = torch.fmod(weight_q, 2)
+        remainder_list[k] = remainder
+        weight_q = torch.round((weight_q-remainder)/2)
+    return remainder_list
+
+
+def binary_to_int(wqb_list, w_bitwidth=8, device='cpu'):
+    bin_list_shape = wqb_list.size()
+    wq_list_shape = list(bin_list_shape[1:])
+    wq_list = torch.zeros(wq_list_shape, device=device)
+    for k in reversed(range(int(w_bitwidth))):
+        wq_list += (wqb_list[k] * 2.**(w_bitwidth-1-k))
+    return wq_list
+    
+
 def int_to_signMagnitude(weight_q, w_bitwidth: int=8, device='cpu'):
     weight_q = weight_q.to(device, copy=True)
     is_min = weight_q.eq(-2**(w_bitwidth-1))

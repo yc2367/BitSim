@@ -30,14 +30,16 @@ class BitVert(Stripes):
                  en_b2s:         bool=False,
                  en_lsb_pruning: bool=False,  # whether enable LSB column pruning using bi-directional bit sparsity
                  en_ol_channel:  bool=False,  # whether enable outlier channel groupping
-                 en_eager_compression: bool=False  # whether enable eager compression
+                 en_eager_compression: bool=False,  # whether enable eager compression
+                 separator=64,
                  ): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
                          pe_array_dim, model_name, init_mem=False)
         self.model_q = self._get_quantized_model()
-                
-        self._init_computation_mode(en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression)
+        self.separator = separator
 
+        self._init_computation_mode(en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression)
+        
         # to be modified later
         self.w_prec_config = self._calc_w_prec_config()
         
@@ -84,34 +86,19 @@ class BitVert(Stripes):
         print(f'eff precision: {eff_bit / total_bit * self.pe.input_precision_p}')
 
     def _calc_w_prec_config(self):
+        
         w_prec_config = {}
-        profiler = BitVertProfiler(self.model_name, self.en_eager_compression)
-        nonzero_channel = profiler.nonzero_channels
-        prec_h = self.pe.input_precision_s
-        prec_l = self.prec_low
 
         for name in self.layer_name_list:
+            w_dim = self.weight_dim[name]
+            if len(w_dim) == 4:
+                cout = w_dim[3]
+                if cout <= self.separator:
+                    prec_l = 5
+                else:
+                    prec_l = 4
             # format for a layer configuration: [(prec_high, % of channel), (prec_low, % of channel)]
-            if (not self.en_lsb_pruning) and (not self.en_ol_channel):
-                # assign input_precision_p to every layer
-                w_prec_config[name] = [(prec_h, 1.0), (prec_h, 0.)]
-            elif self.en_lsb_pruning:
-                # only assign a single (lower) precision to every layer
-                w_prec_config[name] = [(prec_h-2, 1.0), (prec_h, 0.)]
-            elif self.en_ol_channel:
-                # assign high precision to few outlier channels, assign low precision to most other channels
-                num_total_channel = self.weight_dim[name][-1]
-                if 'conv' in name:
-                    tmp_name = name.rstrip('.conv')
-                else:
-                    tmp_name = name
-
-                if tmp_name in nonzero_channel.keys():
-                    num_outlier_channel = len(nonzero_channel[tmp_name])
-                else:
-                    num_outlier_channel = 0
-                prec_high_ratio = num_outlier_channel / num_total_channel
-                w_prec_config[name] = [(prec_h, prec_high_ratio), (prec_l, 1 - prec_high_ratio)]
+            w_prec_config[name] = [(0, 0), (prec_l, 1.)]
         return w_prec_config
             
 

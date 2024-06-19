@@ -17,7 +17,7 @@ class LayerDim:
 
         with open(layer_dim_path) as f:
             layer_dim_list = json.load(f)
-
+            
         return layer_dim_list
     
     def _get_layer_info(self, layer_dim_list):

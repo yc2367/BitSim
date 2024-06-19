@@ -9,7 +9,7 @@ from sim.stripes import Stripes
 # Pragmatic accelerator
 class Ant(Stripes):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
-    PRECISION_SCALING = 0.8 # scaling factor to account for 6-bit ANT
+    PRECISION_SCALING = 0.85 # scaling factor to account for 6-bit ANT
     
     DISPATCHER_ENERGY_PER_COL = 0.072625 
     PE_ENERGY = 0.28125 * PR_SCALING * PRECISION_SCALING # energy per PE
@@ -63,14 +63,14 @@ class Ant(Stripes):
                         self._o_mem_required[name] = math.ceil(cout * i_prec / 8)  * token_num
 
     def _init_mem(self):
-        w_prec = 6
-        w_sram_bank = self.pe_array_dim['h'] * w_prec / 8 
+        w_prec = 8
+        w_sram_bank = self.pe_array_dim['h'] 
         w_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 240 * 1024*8, 
+                            'size': 256 * 1024*8, 
                             'bank_count': w_sram_bank, 
-                            'rw_bw': (self.pe_dotprod_size * 8) * w_sram_bank, 
+                            'rw_bw': (self.pe_dotprod_size * w_prec) * w_sram_bank, 
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,
@@ -80,14 +80,14 @@ class Ant(Stripes):
                                      min_r_granularity=None, min_w_granularity=64,  
                                      get_cost_from_cacti=True, double_buffering_support=False)
         
-        i_prec = 6
-        i_sram_bank = self.pe_array_dim['w'] * i_prec / 8 
+        i_prec = 8
+        i_sram_bank = self.pe_array_dim['w'] * 6 / 8
         i_sram_config = {
                             'technology': 0.028,
                             'mem_type': 'sram', 
-                            'size': 270 * 1024*8, 
+                            'size': 256 * 1024*8, 
                             'bank_count': i_sram_bank, 
-                            'rw_bw': (self.pe_dotprod_size * 8) * i_sram_bank,
+                            'rw_bw': (self.pe_dotprod_size * i_prec) * i_sram_bank,
                             'r_port': 1, 
                             'w_port': 1, 
                             'rw_port': 0,

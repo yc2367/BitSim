@@ -1,7 +1,8 @@
 from sim.bitwave import Bitwave
 from model_profile.models.models import MODEL
 
-name_list = ['resnet34',]
+name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
+name_list = ['bert-sst2']
 
 if __name__ == "__main__":
     for name in name_list:
@@ -9,7 +10,8 @@ if __name__ == "__main__":
             w_prec = 6
         else:
             w_prec = 5
-        acc = Bitwave(w_prec, 8, 8, [32, 16], name, layer_prec={}, en_bitflip=True, en_config_dataflow=True)
+        acc = Bitwave(w_prec, 8, 8, [32, 16], name, layer_prec={}, 
+                      en_bitflip=True, en_config_dataflow=False)
         
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

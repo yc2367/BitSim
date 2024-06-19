@@ -40,7 +40,7 @@ for n, m in model.named_modules():
 
 GROUP_SIZE = 32
 w_bitwidth = 8
-num_col_pruned = 4
+num_col_pruned = 5
 
 loss = 1
 if loss == 0:

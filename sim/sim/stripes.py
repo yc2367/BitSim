@@ -470,13 +470,16 @@ class Stripes(Accelerator):
                     total_fetch_input  = num_refetch_input * i_mem_required
                     #print('Need DRAM refetch ...')
                     #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
-                    if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
-                        #print(f'Refetch weight for {num_refetch_weight} times ...')
-                        # refetch all weight for every input tile
-                        self._layer_mem_refetch[name] = (num_refetch_weight, 1)
+                    if self.model_name in ['vgg16', 'resnet34', 'resnet50']:
+                        if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
+                            #print(f'Refetch weight for {num_refetch_weight} times ...')
+                            # refetch all weight for every input tile
+                            self._layer_mem_refetch[name] = (num_refetch_weight, 1)
+                        else:
+                            #print(f'Refetch input for {num_refetch_input} times ...')
+                            # refetch all input for every weight tile
+                            self._layer_mem_refetch[name] = (1, num_refetch_input)
                     else:
-                        #print(f'Refetch input for {num_refetch_input} times ...')
-                        # refetch all input for every weight tile
                         self._layer_mem_refetch[name] = (1, num_refetch_input)
                 else:
                     # no need refetch

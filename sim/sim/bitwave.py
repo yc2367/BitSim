@@ -8,6 +8,7 @@ from hw.mem.mem_instance import MemoryInstance
 from hw.alu.alu_unit import BitSerialPE
 
 from sim.util.bin_int_convert import int_to_signMagnitude
+from sim.util.bitflip_layer import bitflip_signMagnitude_conv, bitflip_signMagnitude_fc
 
 # Bitwave accelerator
 class Bitwave(Stripes):
@@ -40,7 +41,7 @@ class Bitwave(Stripes):
             self.dataflow = [(8, 32, 16), (16, 32, 8), (32, 32, 4), (128, 8, 1), 
                             (16, 64, 1), (32, 32, 1), (16, 1, 16)]
         else:
-            self.dataflow = [(16, 32, 8)]
+            self.dataflow = [[8] + pe_array_dim]
 
         # to be modified later
         self.w_prec_config = {}
@@ -99,6 +100,8 @@ class Bitwave(Stripes):
         # reduce along group_size
         num_eff_bit_per_group  = torch.sum(bit_tensor, dim=-1)
         is_not_zero_bit_column = num_eff_bit_per_group.gt(0.)
+        print(is_not_zero_bit_column.shape)
+        print(torch.sum(is_not_zero_bit_column))
         # reduce along bit_significance
         num_bit_column_per_group = torch.sum(is_not_zero_bit_column, dim=0)
         num_cycle = torch.max(num_bit_column_per_group)
@@ -107,8 +110,8 @@ class Bitwave(Stripes):
     def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        start_bit = 8 - self.pe.input_precision_s
-        wq_b = wq_b[start_bit:, :, :, :, :]
+        # start_bit = 8 - self.pe.input_precision_s
+        # wq_b = wq_b[start_bit:, :, :, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_row = dataflow[1]
@@ -174,8 +177,8 @@ class Bitwave(Stripes):
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        start_bit = 8 - self.pe.input_precision_s
-        wq_b = wq_b[start_bit:, :, :, :, :]
+        # start_bit = 8 - self.pe.input_precision_s
+        # wq_b = wq_b[start_bit:, :, :, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_col = dataflow[2]
@@ -224,8 +227,8 @@ class Bitwave(Stripes):
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        start_bit = 8 - self.pe.input_precision_s
-        wq_b = wq_b[start_bit:, :, :]
+        # start_bit = 8 - self.pe.input_precision_s
+        # wq_b = wq_b[start_bit:, :, :]
 
         pe_group_size = dataflow[0]
         num_pe_row = dataflow[1]
@@ -252,8 +255,8 @@ class Bitwave(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-
-                if not self.en_bitflip:
+                print(tile_cin.shape)
+                if self.en_bitflip:
                     cycle_tile_cin = self._count_zero_bit_column(tile_cin)
                 else:
                     cycle_tile_cin = self.w_prec_config[layer_name] - 1
@@ -480,6 +483,11 @@ class Bitwave(Stripes):
     def _get_quantized_weight(self, layer_name):
         for name, wq in self.model_q.items():
             if ( layer_name == name ):
+                #wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(self.weight_dim[layer_name]) == 4:
+                    wq = bitflip_signMagnitude_conv(wq, w_bitwidth=8, group_size=32, num_pruned_column=8-self.pe.input_precision_s, device=self.DEVICE)
+                else:
+                    wq = bitflip_signMagnitude_fc(wq, w_bitwidth=8, group_size=32, num_pruned_column=8-self.pe.input_precision_s, device=self.DEVICE)
                 wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_signMagnitude.shape) == 5:
                     wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])

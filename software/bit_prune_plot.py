@@ -58,7 +58,7 @@ pruned_col_num = 3
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     fig_title = ['ResNet50 Conv4.1.3 Weight', 'With BitWave Bit-flip', 'With BitVert Binary-Pruning']
-    color_list = [(140/255, 205/255, 140/255), (255/255, 150/255, 150/255), (140/255, 205/255, 140/255)]
+    color_list = [(135/255, 171/255, 237/255), (255/255, 150/255, 150/255), (140/255, 205/255, 140/255)]
     ticksize = 14
     for N in range(pruned_col_num, pruned_col_num+1):
         num_pruned_column = N
@@ -109,7 +109,7 @@ def main():
                             bins=num_bin, color=color, ec=None, ax=ax)
                 if func == 0:
                     sns.histplot(weight_test_new_5b.cpu().reshape(-1).numpy(), 
-                            bins=32, color=(255/255, 150/255, 150/255), ec=None, ax=ax)
+                            bins=32, color=(243/255, 188/255, 40/255), ec=None, ax=ax)
                 ax.set_xlabel('Weight Value', fontsize=ticksize+1, weight='bold', labelpad=5)
                 if func == 0:
                     ax.set_ylabel(r'Count ($\times$1000)', fontsize=ticksize+1, weight='bold', labelpad=0)

@@ -215,10 +215,15 @@ class SpartenProfiler(object):
         num_groups = math.ceil(cin / group_size) 
         is_integer_num_group = (cin % group_size) == 0
 
-        if bi > 8:
+        if bi > 4:
             # prevent out-of-memory due to large batch size
-            bi = 8
+            bi = 4
             i_feature = i_feature[0: bi]
+        if si > 128:
+            si = 128
+            so = 128
+            i_feature = i_feature[:, 0: si]
+            o_feature = o_feature[:, 0: so]
         
         # count number of zero operations for every group
         if is_integer_num_group:
