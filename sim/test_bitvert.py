@@ -19,7 +19,7 @@ if __name__ == "__main__":
             w_prec = 8
             
         acc = BitVert(w_prec, 8, 16, [32, 16], name, 
-                    en_b2s=True, en_lsb_pruning=False, 
+                    en_bbs=True, en_lsb_pruning=False, 
                     en_ol_channel=True, en_eager_compression=False)
 
         total_cycle    = acc.calc_cycle()

@@ -27,7 +27,7 @@ class BitVert(Stripes):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 en_b2s:         bool=False,
+                 en_bbs:         bool=False,
                  en_lsb_pruning: bool=False,  # whether enable LSB column pruning using bi-directional bit sparsity
                  en_ol_channel:  bool=False,  # whether enable outlier channel groupping
                  en_eager_compression: bool=False,  # whether enable eager compression
@@ -38,7 +38,7 @@ class BitVert(Stripes):
         self.model_q = self._get_quantized_model()
         self.separator = separator
 
-        self._init_computation_mode(en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression)
+        self._init_computation_mode(en_bbs, en_lsb_pruning, en_ol_channel, en_eager_compression)
         
         # to be modified later
         self.w_prec_config = self._calc_w_prec_config()
@@ -54,11 +54,11 @@ class BitVert(Stripes):
         self._check_layer_mem_size()
         self._calc_num_mem_refetch()
     
-    def _init_computation_mode(self, en_b2s, en_lsb_pruning, en_ol_channel, en_eager_compression):
+    def _init_computation_mode(self, en_bbs, en_lsb_pruning, en_ol_channel, en_eager_compression):
         if en_lsb_pruning or en_ol_channel:
-            self.en_b2s = True
+            self.en_bbs = True
         else:
-            self.en_b2s = en_b2s
+            self.en_bbs = en_bbs
         if en_ol_channel:
             self.en_lsb_pruning = False
         else: 
@@ -203,7 +203,7 @@ class BitVert(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        if not self.en_b2s:
+                        if not self.en_bbs:
                             cycle_tile_k = self._count_no_b2s_cycle(tile_k)
                         else:
                             cycle_tile_k = prec_high
@@ -218,7 +218,7 @@ class BitVert(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            if not self.en_b2s:
+                            if not self.en_bbs:
                                 cycle_tile_cw = self._count_no_b2s_cycle(tile_cw)
                             else:
                                 cycle_tile_cw = prec_high
@@ -273,7 +273,7 @@ class BitVert(Stripes):
                     l_ti_k = ti_k * pe_group_size
                     u_ti_k = (ti_k+1) * pe_group_size
                     tile_k = tile_cw[:, l_ti_k:u_ti_k]
-                    if not self.en_b2s:
+                    if not self.en_bbs:
                         cycle_tile_k = self._count_no_b2s_cycle(tile_k)
                     else:
                         cycle_tile_k = prec_high
@@ -323,7 +323,7 @@ class BitVert(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-                if not self.en_b2s:
+                if not self.en_bbs:
                     cycle_tile_cin = self._count_no_b2s_cycle(tile_cin)
                 else:
                     cycle_tile_cin = prec_high

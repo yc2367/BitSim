@@ -109,6 +109,7 @@ class Bitlet(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
+                        
                         num_eff_bit_per_lane = torch.sum(tile_k, dim=-1)
                         cycle_tile_k = torch.max(num_eff_bit_per_lane).item()
                         cycle_kernel += int(cycle_tile_k)
@@ -127,6 +128,7 @@ class Bitlet(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
+
                             num_eff_bit_per_lane = torch.sum(tile_cw, dim=-1)
                             cycle_tile_cw = torch.max(num_eff_bit_per_lane).item()
                             cycle_kernel += int(cycle_tile_cw)
@@ -237,6 +239,7 @@ class Bitlet(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
+
                 num_eff_bit_per_lane = torch.sum(tile_cin, dim=-1)
                 cycle_tile_cin = torch.max(num_eff_bit_per_lane).item()
                 cycle_kernel += int(cycle_tile_cin)
@@ -245,6 +248,7 @@ class Bitlet(Stripes):
                 max_intra_pe_op_kernel += torch.max(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
                 num_eff_op_kernel += torch.sum(tile_cin).item()
                 num_total_op_kernel += (cycle_tile_cin * self.pe.input_precision_p * num_pe_row)
+
         cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
 

@@ -241,7 +241,7 @@ class Pragmatic(Stripes):
                 cycle_tile_cin = torch.max(num_eff_bit_per_word).item()
                 cycle_kernel += int(cycle_tile_cin)
 
-                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
+                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
                 max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
                 num_eff_op_kernel += torch.sum(tile_cin).item() 
                 num_total_op_kernel += (cycle_tile_cin * pe_group_size * num_pe_row)
@@ -261,10 +261,10 @@ class Pragmatic(Stripes):
     def _get_quantized_weight(self, layer_name):
         for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
-                if len(wqb_twosComplement.shape) == 5:
-                    wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
-                return wqb_twosComplement
+                wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(wqb_signMagnitude.shape) == 5:
+                    wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
+                return wqb_signMagnitude
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
         
     def calc_compute_energy(self):

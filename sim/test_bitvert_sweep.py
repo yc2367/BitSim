@@ -6,7 +6,7 @@ if __name__ == "__main__":
     for name in name_list:
         for separator in [64, 128, 256, 512]:
             acc = BitVert(8, 8, 16, [32, 16], name, 
-                        en_b2s=True, en_lsb_pruning=False, 
+                        en_bbs=True, en_lsb_pruning=False, 
                         en_ol_channel=True, en_eager_compression=False, separator=separator)
 
             total_cycle    = acc.calc_cycle()
