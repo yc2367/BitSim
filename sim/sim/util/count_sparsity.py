@@ -105,7 +105,7 @@ def count_less_bit_2sComplement_old(wq_b, w_bitwidth=8, group_size=16, num_prune
 def count_less_bit_2sComplement(wq_b, w_bitwidth=8, group_size=16, num_pruned_column=2):
     wb = wq_b.clone()
     eq_msb_column = torch.ones(wb.shape[1], device=wb.device)
-    for i in range(1, w_bitwidth-num_pruned_column):
+    for i in range(1, num_pruned_column + 1):
         eq_column = torch.all(torch.eq(wb[0], wb[i]), dim=-1)
         eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
         wb[i, eq_msb_column, :] = 0

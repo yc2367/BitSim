@@ -3,6 +3,7 @@ from model_profile.models.models import MODEL
 
 name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
 name_list = ['bert-sst2']
+name_list = ['resnet50']
 
 if __name__ == "__main__":
     en_scalability_study = True
@@ -12,7 +13,7 @@ if __name__ == "__main__":
         group_size = 32
 
     for name in name_list:
-        acc = Bitlet(8, 8, group_size, [32, 16], name)
+        acc = Bitlet(8, 8, group_size, [2, 16], name)
 
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

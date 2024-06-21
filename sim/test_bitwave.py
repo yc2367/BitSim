@@ -3,6 +3,7 @@ from model_profile.models.models import MODEL
 
 name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
 name_list = ['bert-sst2']
+#name_list = ['resnet50']
 
 if __name__ == "__main__":
     for name in name_list:
@@ -10,7 +11,7 @@ if __name__ == "__main__":
             w_prec = 6
         else:
             w_prec = 5
-        acc = Bitwave(w_prec, 8, 8, [32, 16], name, layer_prec={}, 
+        acc = Bitwave(w_prec, 8, 8, [16, 16], name, layer_prec={}, 
                       en_bitflip=True, en_config_dataflow=False)
         
         total_cycle    = acc.calc_cycle()

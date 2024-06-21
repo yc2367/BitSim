@@ -207,17 +207,15 @@ class BitVert(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        cycle_tile_k = self.pe.input_precision_s
-                        cycle_kernel += int(cycle_tile_k)
 
-                        tile_k_eff = count_less_bit_2sComplement(tile_k, group_size=pe_group_size, num_pruned_column=num_skipped_col)
-                        num_eff_bit_per_group = torch.sum(tile_k_eff, dim=0)
-                        pe_min_load = torch.min(num_eff_bit_per_group, dim=-1).values.sum().item() * pe_group_size
-                        pe_max_load = torch.max(num_eff_bit_per_group, dim=-1).values.sum().item() * pe_group_size
-                        min_intra_pe_op_kernel += pe_min_load
-                        max_intra_pe_op_kernel += pe_max_load
-                        num_eff_op_kernel += (torch.sum(tile_k_eff).item())
-                        num_total_op_kernel += ((cycle_tile_k + num_skipped_col) * num_pe_row * pe_group_size) 
+                        tile_k_eff = count_less_bit_2sComplement(tile_k, group_size=pe_group_size, num_pruned_column=2)
+                        num_eff_bit_per_word = torch.sum(tile_k_eff, dim=-1)
+                        pe_min_load = torch.min(num_eff_bit_per_word, dim=0).values.sum().item() * input_prec
+                        pe_max_load = torch.max(num_eff_bit_per_word, dim=0).values.sum().item() * input_prec
+                        min_intra_pe_op_kernel += pe_min_load / 2 # 50% BBS
+                        max_intra_pe_op_kernel += pe_max_load / 2 # 50% BBS
+                        num_eff_op_kernel += torch.sum(tile_k_eff).item() / 2 # 50% BBS
+                        num_total_op_kernel += ((cycle_tile_k + num_skipped_col) * num_pe_row * pe_group_size / 2) # 50% BBS
             else:
                 iter_cw = math.ceil(cw / pe_group_size)
                 for tk1 in range(k):
@@ -231,15 +229,15 @@ class BitVert(Stripes):
                             cycle_tile_cw = self.pe.input_precision_s
                             cycle_kernel += int(cycle_tile_cw)
 
-                            tile_cw_eff = count_less_bit_2sComplement(tile_cw, group_size=pe_group_size, num_pruned_column=num_skipped_col)
-                            num_eff_bit_per_group = torch.sum(tile_cw_eff, dim=0)
-                            pe_min_load = torch.min(num_eff_bit_per_group, dim=-1).values.sum().item() * pe_group_size
-                            pe_max_load = torch.max(num_eff_bit_per_group, dim=-1).values.sum().item() * pe_group_size
-                            min_intra_pe_op_kernel += pe_min_load
-                            max_intra_pe_op_kernel += pe_max_load
-                            num_eff_op_kernel += (torch.sum(tile_cw_eff).item())
-                            num_total_op_kernel += ((cycle_tile_cw + num_skipped_col) * num_pe_row * pe_group_size) 
-                                        
+                            tile_cw_eff = count_less_bit_2sComplement(tile_cw, group_size=pe_group_size, num_pruned_column=2)
+                            num_eff_bit_per_word = torch.sum(tile_cw_eff, dim=-1)
+                            pe_min_load = torch.min(num_eff_bit_per_word, dim=0).values.sum().item() * input_prec
+                            pe_max_load = torch.max(num_eff_bit_per_word, dim=0).values.sum().item() * input_prec
+                            min_intra_pe_op_kernel += pe_min_load / 2 # 50% BBS
+                            max_intra_pe_op_kernel += pe_max_load / 2 # 50% BBS
+                            num_eff_op_kernel += torch.sum(tile_cw_eff).item() / 2 # 50% BBS
+                            num_total_op_kernel += ((cycle_tile_cw + num_skipped_col) * num_pe_row * pe_group_size / 2) # 50% BBS
+                            
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
@@ -351,16 +349,15 @@ class BitVert(Stripes):
                 cycle_tile_cin = self.pe.input_precision_s
                 cycle_kernel += int(cycle_tile_cin)
 
-                tile_cin_eff = count_less_bit_2sComplement(tile_cin, group_size=pe_group_size, num_pruned_column=num_skipped_col)
-                num_eff_bit_per_group = 16 - torch.sum(tile_cin_eff, dim=-1) 
-                num_eff_bit_per_group[num_eff_bit_per_group.eq(0.)] = pe_group_size / 2
-                pe_min_load = torch.min(num_eff_bit_per_group, dim=-1).values.sum().item() * num_pe_row
-                pe_max_load = torch.max(num_eff_bit_per_group, dim=-1).values.sum().item() * num_pe_row
+                tile_cin_eff = count_less_bit_2sComplement(tile_cin, group_size=pe_group_size, num_pruned_column=2)
+                num_eff_bit_per_word = torch.sum(tile_cin_eff, dim=-1)
+                pe_min_load = torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
+                pe_max_load = torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
                 #print(torch.min(num_eff_bit_per_word, dim=-1).values.sum().item(), torch.max(num_eff_bit_per_word, dim=-1).values.sum().item())
-                min_intra_pe_op_kernel += pe_min_load
-                max_intra_pe_op_kernel += pe_max_load
-                num_eff_op_kernel += (torch.sum(tile_cin_eff).item())
-                num_total_op_kernel += ((cycle_tile_cin + num_skipped_col) * num_pe_row * pe_group_size / 2) 
+                min_intra_pe_op_kernel += pe_min_load / 2 # 50% BBS
+                max_intra_pe_op_kernel += pe_max_load / 2 # 50% BBS
+                num_eff_op_kernel += torch.sum(tile_cin_eff).item() / 2 # 50% BBS
+                num_total_op_kernel += ((cycle_tile_cin + num_skipped_col) * num_pe_row * pe_group_size / 2) # 50% BBS
                 
         cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
