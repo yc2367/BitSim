@@ -1,23 +1,30 @@
 """
-Pytorch 8bit Example on the ImagetNet-1K dataset
+DNN (Sparse) Post Training Quantiztion on ImageNet-1K dataset
 """
 
-import os
 import sys
+sys.path.append("../torch2chip/")
+import os
 import logging
 import argparse
-import torch
-import torchvision
 
-from tqdm import tqdm
-from src.utils.utils import str2bool, load_checkpoint, AverageMeter, accuracy
-from src.trainer.ptq import PTQ
+from src.utils.utils import str2bool, save_checkpoint
 from src.utils.get_data import get_ptq_dataloader
-from src.d2c.torchq import QD2C
-from torchvision.models.quantization import ResNet18_QuantizedWeights, ResNet50_QuantizedWeights
+from src.trainer.base import Trainer
+from src.trainer.pruning import STrainer
+from src.trainer.ptq import PTQ, PTQAttention
+from src.t2c.convert import ViTV4C
+
+from timm.models.vision_transformer import vit_tiny_patch16_224, vit_base_patch16_224, vit_small_patch16_224
+
+TRAINERS = {
+    "base": Trainer,
+    "sparse": STrainer,
+    "ptq": PTQ,
+    "qattn": PTQAttention
+}
 
 parser = argparse.ArgumentParser(description='T2C Training')
-
 parser.add_argument('--model', type=str, help='model architecture')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--lr_sch', type=str, default='step', help='learning rate scheduler')
@@ -35,7 +42,6 @@ parser.add_argument('--workers', type=int, default=16,help='number of data loadi
 
 # dataset
 parser.add_argument('--dataset', type=str, default='cifar10', help='dataset: CIFAR10 / ImageNet_1k')
-parser.add_argument('--data_path', type=str, default='./data/', help='data directory')
 parser.add_argument('--train_dir', type=str, default='./data/', help='training data directory')
 parser.add_argument('--val_dir', type=str, default='./data/', help='test/validation data directory')
 
@@ -56,50 +62,15 @@ parser.add_argument("--mixed_prec", type=str2bool, nargs='?', const=True, defaul
 # trainer
 parser.add_argument('--trainer', type=str, default='base', help='trainer type')
 
-# prune
-parser.add_argument('--pruner', type=str, default='element', help='trainer type')
-parser.add_argument('--prune_ratio', default=0.9, type=float, help='target prune ratio')
-parser.add_argument('--drate', default=0.5, type=float, help='additional pruning rate before regrow')
-parser.add_argument('--warmup', type=int, default=1, help='Number of epochs to train.')
-parser.add_argument('--prune_freq', type=int, default=1000, help='Iteration gap between sparsity update')
-parser.add_argument('--final_epoch', type=int, default=160, help='Final pruning epoch')
-
 # ptq
 parser.add_argument('--wbit', type=int, default=8, help="Weight Precision")
 parser.add_argument('--abit', type=int, default=8, help="Input Precision")
 parser.add_argument('--wqtype', type=str, default="adaround", help='Weight quantizer')
 parser.add_argument('--xqtype', type=str, default="lsq", help='Input quantizer')
 parser.add_argument('--num_samples', type=int, default=1024, help="Number of samples for calibration")
-
-# bit manipulation
-parser.add_argument('--N', type=int, default=4, help="Number of pruned columns")
-parser.add_argument('--grp_size', type=int, default=16, help="Group size")
-parser.add_argument('--flag', type=int, default=0, help="0 for signed magnitude, 1 for 2s complement")
-parser.add_argument('--hamming_distance', type=float, default=1.5, help="hamming distance ")
-
+parser.add_argument("--layer_trainer", type=str2bool, nargs='?', const=True, default=False, help="enable layer-wise training / calibration")
 
 args = parser.parse_args()
-
-def valid_epoch(model, validloader):
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
-    
-    model.eval()
-    
-    with torch.no_grad():
-        for idx, (inputs, target) in enumerate(tqdm(validloader)):
-            inputs = inputs
-            target = target
-            
-            out = model(inputs)
-            prec1, prec5 = accuracy(out.data, target, topk=(1, 5))
-
-            top1.update(prec1.item(), inputs.size(0))
-            top5.update(prec5.item(), inputs.size(0))
-
-    print(f"Evaluation Accuracy = {top1.avg}")
-        
 
 def main():
     if not os.path.isdir(args.save_path):
@@ -117,23 +88,49 @@ def main():
     logger.root.setLevel(0)
     logger.info(args)
 
-    # # get model
-    # if args.model == "resnet18":
-    #     model = torchvision.models.quantization.resnet18(weights=ResNet18_QuantizedWeights, quantize=True)
-    # elif args.model == "resnet50":
-    #     model = torchvision.models.quantization.resnet50(weights=ResNet50_QuantizedWeights, quantize=True)
-
-    model = torchvision.models.quantization.resnet50(weights=ResNet50_QuantizedWeights, quantize=True)
-    print(model)
-
-    # get data 
     trainloader, testloader, num_classes = get_ptq_dataloader(args)
-    
-    qd2c = QD2C(model, wbit=args.wbit, args=args)
-    qmodel = qd2c.fit()
 
-    logger.info(f"N={args.N} | grp_size {args.grp_size} | flag {args.flag}")
-    valid_epoch(qmodel, testloader)
+    # model
+    if args.model == "vit_tiny":
+        model = vit_tiny_patch16_224(pretrained=True)
+    elif args.model == "vit_base":
+        model = vit_base_patch16_224(pretrained=True)
+    elif args.model == "vit_small":
+        model = vit_small_patch16_224(pretrained=True)
+    else:
+        raise NotImplementedError(f"Unknown model architecture: {args.model}")
 
-if __name__ == "__main__":
+    converter = ViTV4C(model, wbit=args.wbit, abit=args.abit)
+    qmodel = converter.convert()
+
+    # define the trainer
+    trainer = TRAINERS[args.trainer](
+        model=qmodel,
+        loss_type=args.loss_type,
+        trainloader=trainloader,
+        validloader=testloader,
+        args=args,
+        logger=logger
+    )
+
+    trainer.valid_epoch()
+    logger.info("[Before PTQ] Test accuracy = {:.3f}".format(trainer.logger_dict["valid_top1"]))
+
+    # start ptq
+    trainer.fit()
+
+    trainer.valid_epoch()
+    logger.info("[After PTQ] Test accuracy = {:.3f}".format(trainer.logger_dict["valid_top1"]))
+
+    state = {
+        'state_dict': trainer.model.state_dict(),
+        'acc': trainer.logger_dict["valid_top1"],
+    }
+
+    filename=f"checkpoint.pth.tar"
+    save_checkpoint(state, True, args.save_path, filename=filename)
+    logger.info("Model Saved")
+
+
+if __name__ == '__main__':
     main()

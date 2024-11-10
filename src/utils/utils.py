@@ -91,7 +91,7 @@ def load_checkpoint(ckpt, state):
         new_state_dict[name] = v
 
     state.update(new_state_dict)
-    return state, checkpoint["acc"]
+    return state
 
 def load_ddp_checkpoint(ckpt, state):
     checkpoint = torch.load(ckpt)
@@ -104,4 +104,4 @@ def load_ddp_checkpoint(ckpt, state):
         new_state_dict[name] = v
 
     state.update(new_state_dict)
-    return state, checkpoint["acc"]
+    return state

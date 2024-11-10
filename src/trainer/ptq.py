@@ -2,7 +2,6 @@
 Calibrator of post-training quantization (PTQ)
 """
 
-import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,36 +12,30 @@ from tqdm import tqdm
 
 from src.utils.utils import accuracy, AverageMeter
 from src.module.convert import get_parent_name
-from src.module.base import _QBaseConv2d, _QBaseLinear
+from src.module.base import _QBaseConv2d, _QBaseLinear, _QBase
 from src.module.attention import QAttention
 
 from src.quantization.adaround import AdaRound
-from src.quantization.lsq import LSQ
+from src.quantization.lsq import LSQ, LSQTokenWise
+from src.quantization.minmax import MinMaxQuantizer, MinMaxTokenWiseQuantizer, MinMaxChannelWiseWeightQuantizer, MinMaxChannelWiseActQuantizer
+
+from timm.layers.mlp import Mlp
 
 weight_quantizer = {
     "adaround": AdaRound,
+    "minmax": MinMaxQuantizer,
+    "minmax_channel": MinMaxChannelWiseWeightQuantizer,
+    "identity": _QBase
 }
 
 input_quantizer = {
-    "lsq": LSQ
+    "minmax": MinMaxQuantizer,
+    "minmax_token": MinMaxTokenWiseQuantizer,
+    "minmax_channel": MinMaxChannelWiseActQuantizer,
+    "lsq": LSQ,
+    "lsq_token": LSQTokenWise,
+    "identity": _QBase
 }
-
-def assign_quantizer(model, wbit:int, abit:int, wqtype:str, xqtype:str, train_flag=True):
-    """
-    Assign the quantizers to CNN all at once
-    """
-    model = copy.deepcopy(model)
-    modules = dict(model.named_modules(remove_duplicate=True))
-
-    for n, m in modules.items():
-        if isinstance(m, (_QBaseConv2d, _QBaseLinear)):
-            
-            m.wq = weight_quantizer[wqtype](nbit=wbit, train_flag=train_flag, weights=m.weight)
-            m.aq = input_quantizer[xqtype](nbit=abit, train_flag=train_flag)
-
-            parent_name, name = get_parent_name(n)
-            setattr(modules[parent_name], name, m)
-    return model
 
 class DataSaverHook:
     def __init__(self, store_input=False, store_output=False) -> None:
@@ -64,12 +57,14 @@ class PTQ(object):
     PTQ trainer
     """
     def __init__(self, 
-                model: nn.Module, 
-                loss_type: str, 
-                trainloader, 
-                validloader, 
-                args, 
-                logger):
+            model: nn.Module, 
+            loss_type: str, 
+            trainloader, 
+            validloader, 
+            args, 
+            logger
+        ):
+                
         # model architecture
         self.model = model
 
@@ -91,6 +86,9 @@ class PTQ(object):
         self.logger = logger
         self.logger_dict = {}
 
+        # trainer
+        self.layer_train = self.args.layer_trainer
+
         # loss func
         if loss_type == "mse":
             self.criterion = torch.nn.MSELoss().cuda()
@@ -102,6 +100,13 @@ class PTQ(object):
         # cuda
         self.model = self.model.cuda()
         self.steps = len(self.trainloader)
+
+    def freeze(self, layer:Union[nn.Conv2d, nn.Linear]):
+        hasbias = layer.bias is not None
+
+        layer.weight.requires_grad_(False)
+        if hasbias:
+            layer.bias.requires_grad_(False)
 
     def fetch_layer_data(self, layer:nn.Module, batch):
         hook = DataSaverHook(store_input=True, store_output=True)
@@ -125,7 +130,7 @@ class PTQ(object):
         
         return cached_data    
 
-    def layer_calibrator(self, layer:Union[_QBaseConv2d, _QBaseLinear], cached_data):
+    def layer_trainer(self, layer:Union[_QBaseConv2d, _QBaseLinear], cached_data):
         # assign the layer quantizer
         weight = layer.weight
         layer.weight.requires_grad_(False)
@@ -138,12 +143,18 @@ class PTQ(object):
         # quantizer parameters
         qparams = []
 
-        layer.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=weight, train_flag=True).cuda()
+        if self.wqtype == "adaround":
+            layer.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=weight, train_flag=True).cuda()
+        else:
+            layer.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True).cuda()
+        
         qparams += [
             {'params':layer.wq.parameters(), 'lr': self.args.lr, 'weight_decay': 0.0}, 
         ]
 
         layer.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True).cuda()
+        
+        
         qparams += [
             {'params':layer.aq.parameters(), 'lr': self.args.lr, 'weight_decay': 0.0}, 
         ]
@@ -154,6 +165,7 @@ class PTQ(object):
             optimizer = torch.optim.SGD(qparams, weight_decay=self.args.weight_decay)
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(self.epochs * len(cached_data)), eta_min=0.)
+        loss_fn = nn.MSELoss()
         pbar = tqdm(range(self.epochs), desc="Epoch")
         for i in pbar:
             calib_loss = AverageMeter()
@@ -167,7 +179,8 @@ class PTQ(object):
 
                 out = layer(x)
                 
-                err = F.mse_loss(out, y)
+                # err = F.mse_loss(out, y)
+                err = loss_fn(out, y)
                 calib_loss.update(err.item())
 
                 optimizer.zero_grad()
@@ -175,7 +188,33 @@ class PTQ(object):
                 optimizer.step()
                 scheduler.step()
 
-            pbar.set_postfix(lr=scheduler.get_last_lr()[0], loss=calib_loss.avg)
+            pbar.set_postfix(lr=scheduler.get_last_lr()[0], loss=err.item())
+
+        return layer, calib_loss.avg
+    
+    def layer_calibrator(self, layer:Union[_QBaseConv2d, _QBaseLinear], cached_data):
+        self.freeze(layer)
+        layer.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True, unsigned=False).cuda()
+
+        if isinstance(layer, _QBaseConv2d):
+            if layer.in_channels != 3:
+                layer.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=True).cuda()
+        else:
+            layer.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=True).cuda()
+
+        calib_loss = AverageMeter()
+        loss_fn = nn.MSELoss()
+        for idx, batch in enumerate(tqdm(cached_data)):
+            # fetch the data
+            x, y = batch
+
+            # cuda
+            x = x.cuda()
+            y = y.cuda()
+
+            out = layer(x)
+            err = loss_fn(out, y)
+            calib_loss.update(err.item())
 
         return layer, calib_loss.avg
     
@@ -213,7 +252,7 @@ class PTQ(object):
                 losses.update(loss.mean().item(), inputs.size(0))
                 top1.update(prec1.item(), inputs.size(0))
                 top5.update(prec5.item(), inputs.size(0))
-        
+            
         self.logger_dict["valid_loss"] = losses.avg
         self.logger_dict["valid_top1"] = top1.avg
         self.logger_dict["valid_top5"] = top5.avg
@@ -227,7 +266,12 @@ class PTQ(object):
                 cached_data = self.fetch_layer_data_all(m)
 
                 self.logger.info(f"Start Calibration of layer: {n}")
-                new_layer, calib_err = self.layer_calibrator(m, cached_data)
+
+                if self.layer_train:
+                    new_layer, calib_err = self.layer_trainer(m, cached_data)
+                else:
+                    new_layer, calib_err = self.layer_calibrator(m, cached_data)
+
                 self.logger.info(f"Layer {n}: Loss = {calib_err}")
 
                 parent_name, name = get_parent_name(n)
@@ -237,35 +281,56 @@ class PTQ(object):
 class PTQAttention(PTQ):
     def __init__(self, model: Module, loss_type: str, trainloader, validloader, args, logger):
         super().__init__(model, loss_type, trainloader, validloader, args, logger)
-        self.q_layers = ["blocks.10.attn", "blocks.11.attn"]
     
     def update_attn(self, layer:QAttention):
         # low precision qkv
         qkvw = layer.qkv.weight
         projw = layer.proj.weight
         
-        # freeze weights
-        layer.qkv.weight.requires_grad_(False)
-        
-        if layer.qkv.bias is not None:
-            layer.qkv.bias.requires_grad_(False)
-
-        layer.proj.weight.requires_grad_(False)
-        layer.proj.bias.requires_grad_(False)
-
-        # low precision qkv
-        layer.qkv.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=qkvw, train_flag=True).cuda()
-        layer.xq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True).cuda()
-        layer.qqkv = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True).cuda()
+        self.freeze(layer.qkv)
+        self.freeze(layer.proj)
 
         # low precision weights
-        layer.proj.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=projw, train_flag=True).cuda()
-        layer.proj.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True).cuda()
+        if self.wqtype == "adaround":
+            layer.qkv.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=qkvw, train_flag=True).cuda()
+            layer.proj.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=projw, train_flag=True).cuda()
+        else:
+            layer.qkv.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True).cuda()
+            layer.proj.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True).cuda()
+
+        # low precision quantizer
+        layer.xq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=False).cuda()
+        layer.qqkv = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=False).cuda()
+        layer.qproj = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=False).cuda()
         
         return layer
 
-    def layer_calibrator(self, layer:QAttention, cached_data):
-        qlayer = self.update_attn(layer)
+    def update_mlp(self, layer:Mlp):
+        w1 = layer.fc1.weight
+        w2 = layer.fc2.weight
+
+        # freeze weights
+        self.freeze(layer.fc1)
+        self.freeze(layer.fc2)
+
+        # add quantizers
+        if self.wqtype == "adaround":
+            layer.fc1.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=w1, train_flag=True).cuda()
+            layer.fc2.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, weights=w2, train_flag=True).cuda()
+        else:
+            layer.fc1.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True).cuda()
+            layer.fc2.wq = weight_quantizer[self.wqtype](nbit=self.args.wbit, train_flag=True).cuda()
+
+        layer.fc1.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=False).cuda()
+        layer.fc2.aq = input_quantizer[self.xqtype](nbit=self.args.abit, train_flag=True, unsigned=False).cuda()
+
+        return layer
+
+    def layer_trainer(self, layer:Union[QAttention, Mlp], cached_data):
+        if isinstance(layer, QAttention):
+            qlayer = self.update_attn(layer)
+        elif isinstance(layer, Mlp):
+            qlayer = self.update_mlp(layer)
         
         if self.args.optimizer == "adam":
             optimizer = torch.optim.Adam(qlayer.parameters(), weight_decay=self.args.weight_decay)
@@ -273,6 +338,8 @@ class PTQAttention(PTQ):
             optimizer = torch.optim.SGD(qlayer.parameters(), weight_decay=self.args.weight_decay)
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(self.epochs * len(cached_data)), eta_min=0.)
+
+        loss_fn = nn.MSELoss()
         pbar = tqdm(range(self.epochs), desc="Epoch")
         for i in pbar:
             calib_loss = AverageMeter()
@@ -286,7 +353,7 @@ class PTQAttention(PTQ):
 
                 out = layer(x)
                 
-                err = F.mse_loss(out, y)
+                err = loss_fn(out, y)
                 calib_loss.update(err.item())
 
                 optimizer.zero_grad()
@@ -297,19 +364,45 @@ class PTQAttention(PTQ):
             pbar.set_postfix(lr=scheduler.get_last_lr()[0], loss=calib_loss.avg)
 
         return qlayer, calib_loss.avg
+    
+    def layer_calibrator(self, layer:Union[QAttention, Mlp], cached_data):
+        if isinstance(layer, QAttention):
+            qlayer = self.update_attn(layer)
+        elif isinstance(layer, Mlp):
+            qlayer = self.update_mlp(layer)
+        
+        calib_loss = AverageMeter()
+        loss_fn = nn.MSELoss()
+        for idx, batch in enumerate(tqdm(cached_data)):
+            # fetch the data
+            x, y = batch
+
+            # cuda
+            x = x.cuda()
+            y = y.cuda()
+
+            out = qlayer(x)
+            err = loss_fn(out, y)
+            calib_loss.update(err.item())
+
+        return qlayer, calib_loss.avg
 
     def fit(self):
         modules = dict(self.model.named_modules(remove_duplicate=False))
 
         for n, m in modules.items():
-            if isinstance(m, QAttention):
-                if n in self.q_layers:
-                    # fetch data
-                    cached_data = self.fetch_layer_data_all(m)
+            if isinstance(m, (QAttention, Mlp)):
+                # fetch data
+                cached_data = self.fetch_layer_data_all(m)
 
-                    self.logger.info(f"Start Calibration of layer: {n}")
+                self.logger.info(f"Start Calibration of layer: {n}")
+                
+                if self.layer_train:
+                    new_layer, calib_err = self.layer_trainer(m, cached_data)
+                else:
                     new_layer, calib_err = self.layer_calibrator(m, cached_data)
-                    self.logger.info(f"Layer {n}: Loss = {calib_err}")
-                    
-                    parent_name, name = get_parent_name(n)
-                    setattr(modules[parent_name], name, new_layer)
+
+                self.logger.info(f"Layer {n}: Loss = {calib_err}")
+
+                parent_name, name = get_parent_name(n)
+                setattr(modules[parent_name], name, new_layer)

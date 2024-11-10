@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 from src.utils.utils import accuracy, AverageMeter, print_table, convert_secs2time, save_checkpoint
-from timm.loss import LabelSmoothingCrossEntropy
+from src.trainer.scheduler import LabelSmoothingCrossEntropyLoss, LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 
 class Trainer(object):
@@ -33,10 +33,10 @@ class Trainer(object):
         elif loss_type == "mse":
             self.criterion = torch.nn.MSELoss().cuda()
         elif loss_type == "smooth_ce":
-            self.criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
+            self.criterion = LabelSmoothingCrossEntropyLoss(args.num_classes, smoothing=args.smoothing)
         else:
             raise NotImplementedError("Unknown loss type")
-        
+
         if args.optimizer == "sgd":
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=self.args.weight_decay)
         elif args.optimizer == "adam":
@@ -49,6 +49,8 @@ class Trainer(object):
             self.lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.args.schedule, last_epoch=-1)
         elif args.lr_sch == "cos":
             self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.args.epochs, eta_min=1e-5)
+        elif args.lr_sch == "cos_warmup":
+            self.lr_scheduler = LinearWarmupCosineAnnealingLR(self.optimizer, args.warmup, max_epochs=self.args.epochs, warmup_start_lr=args.lr, eta_min=1e-5)
 
         # cuda
         self.use_cuda = torch.cuda.is_available()
@@ -140,9 +142,6 @@ class Trainer(object):
             losses.update(loss.mean().item(), inputs.size(0))
             top1.update(prec1.item(), inputs.size(0))
             top5.update(prec5.item(), inputs.size(0))
-            
-            # if (idx+1) % 50 == 0:
-            #     print("Train: [{}]/[{}], loss = {:.2f}; top1={:.2f}".format(idx+1, len(self.trainloader), loss.item(), prec1.item()))
         
         for name, param in self.model.named_parameters():
             if 'beta' in name:

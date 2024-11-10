@@ -48,7 +48,15 @@ class ResNet18Fuser(LayerFuser):
                 self.model.bn1 = nn.Identity()
                 self.model.relu = nn.Identity()
 
+            elif "fc" in name:
+                fm1 = self.fuse_linear(self.model.fc)
+                self.model.fc = fm1
+
         return self.model
+    
+class ResNet34Fuser(ResNet18Fuser):
+    def __init__(self, model: nn.Module):
+        super().__init__(model)
     
 class ResNet50Fuser(LayerFuser):
     def __init__(self, model: nn.Module):
@@ -100,5 +108,9 @@ class ResNet50Fuser(LayerFuser):
                 # disable other modules
                 self.model.bn1 = nn.Identity()
                 self.model.relu = nn.Identity()
+
+            elif "fc" in name:
+                fm1 = self.fuse_linear(self.model.fc)
+                self.model.fc = fm1
 
         return self.model

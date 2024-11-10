@@ -1,87 +1,150 @@
 """
 Decimal to binary
 """
+import time
+import os
+import json
 import sys
 sys.path.append("../../")
 import torch.nn as nn
+import pandas as pd
+
 from src.d2c.util import *
 from src.module.fuse import QConvReLU, QConvBNReLU
 from src.module.base import _QBaseLinear
+from src.pruner.channel import Pruner, StructuredPruner
 
-from software.util.bitflip_layer import bitflip_zeroPoint_conv, bitflip_zeroPoint_fc
+
+from software.util.bitflip_layer import bitflip_zeroPoint_conv, bitflip_zeroPoint_fc, bitflip_signMagnitude_conv, bitflip_signMagnitude_fc, bitflip_twosComplement_conv, bitflip_twosComplement_fc
 
 class D2C(object):
     def __init__(self, model:nn.Module, wbit:int, args):
         self.model = model
         self.wbit = wbit
         self.grp_size = args.grp_size
+        self.save_path = args.save_path
 
         self.pruned_column_num = args.N
         self.func = args.flag   # 0 for signed magnitude, 1 for 2s complement
 
         self.hamming_distance = args.hamming_distance
 
-        # fetch weights
-        self.target_layers = ["layer4.0.conv1", "layer4.0.conv2", "layer4.1.conv1", "layer4.1.conv2", "fc"]
-        
+        # channel wise pruner
+        self.pruner = Pruner(model=self.model, pr=args.prune_ratio)
+        print(f"Global Prune Ratio = {self.pruner.pr}")
+
 
     def fetch_weights(self):
         self.weight_dict = {}
 
         for n, m in self.model.named_modules():
             if isinstance(m, (QConvBNReLU, QConvReLU)):
-                if n in self.target_layers:
-                    self.weight_dict[n] = m.conv.weight.data.detach()
+                if m.conv.groups == 1:
+                    self.weight_dict[n] = m.conv.qweight.data.detach()
             elif isinstance(m, _QBaseLinear):
-                print(n)
-                if n in self.target_layers:
-                    self.weight_dict[n] = m.weight.data.detach()
+                self.weight_dict[n] = m.qweight.data.detach()
 
-    
     def convert(self):
-        
+        self.pruner.step()
         self.fetch_weights()
 
         self.new_weights = {}
+        self.prune_ratio = {}
         for k, weight in self.weight_dict.items():
             print(f"Layer [{k}] Start Conversion!")
             if self.func == 0:
-                if len(weight.shape) == 4:
-                    weight_new = process_signMagnitude_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
-                                                                    pruned_column_num=self.pruned_column_num, device=weight.device)
+                if len(weight.shape) == 4 or "downsample" in k:
+                    weight_new = bitflip_signMagnitude_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
+                                                                    num_pruned_column=self.pruned_column_num, device="cuda")
                     
                 elif len(weight.shape) == 2:
-                    weight_new = process_signMagnitude_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
-                                                                    pruned_column_num=self.pruned_column_num, device=weight.device)
+                    weight_new = bitflip_signMagnitude_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
+                                                                    num_pruned_column=self.pruned_column_num, device="cuda")
+
+
+            elif self.func == 1:
+                print(f"twos complement for layer {k}")
+                if len(weight.shape) == 4:
+                    weight_new = bitflip_twosComplement_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
+                                                                    num_pruned_column=self.pruned_column_num, device="cuda")
+
+                if len(weight.shape) == 2:
+                    weight_new = bitflip_twosComplement_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, 
+                                                                    num_pruned_column=self.pruned_column_num, device="cuda")
 
             else:
                 if len(weight.shape) == 4:
-                    weight_new = bitflip_zeroPoint_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cpu")
+                    if weight.size(1) != 3:
+                        
+                        # if weight.shape[0] >= 128:
+                        #     N = int(self.pruned_column_num)
+                        # else:
+                        #     N = int(self.pruned_column_num-1)
+
+                        weight_new = bitflip_zeroPoint_conv(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cuda")
+                    else:
+                        weight_new = weight
 
                 if len(weight.shape) == 2:
-                    weight_new = bitflip_zeroPoint_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cpu")
+                    # weight_new = weight
+                    if weight.shape[1] <= 4096:
+                        weight_new = bitflip_zeroPoint_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, const_bitwidth=4, device="cuda")
+                    else:
+                        # weight_new = weight
+                        weight_new = bitflip_twosComplement_fc(weight, w_bitwidth=self.wbit, group_size=self.grp_size, num_pruned_column=self.pruned_column_num, device="cuda")
 
-            # update the dictionary
-            mse_error = torch.nn.functional.mse_loss(weight_new, weight)
-            print(f"MSE Error = {mse_error}")
-            self.new_weights[k] = weight_new
+
+            print(f"Total allocated memory = {torch.cuda.memory_allocated(0)/1e+9:.3f}GB")
+
+            
+            if k in self.pruner.masks.keys():
+                mask = self.pruner.masks[k]
+                weight_mix = weight.mul(mask) + weight_new.mul(1 - mask)
+
+                # bidirectional pruning ratio
+                pr = mask.eq(0.0).float().sum().div(mask.numel())
+            else:
+                print(f"Skip conversion of layer {k}")
+                weight_mix = weight
+                pr = torch.tensor(0.0)
+
+            error = torch.nn.functional.mse_loss(weight_mix, weight)
+            self.new_weights[k] = weight_mix
+            print(f"Prune Ratio = {pr} MSE = {error.item():.2f}")
+            
+            # dump the dict
+            nz_dict = self.pruner.export()
+            json_path = os.path.join(self.save_path, "nonzero_channels.json")
+            with open(json_path, "w") as outfile: 
+                json.dump(nz_dict, outfile)
+            
+            # log
+            self.prune_ratio[k] = pr.item()
 
         print("Conversion completed!")
+        df = pd.DataFrame.from_dict(self.prune_ratio, orient="index")
+        df.to_csv(os.path.join(self.save_path, "layer_wise_pr.csv"))
+        print("DataFrame saved!")
+
+        overall_sparsity = self.pruner.overall_sparsity()
+        print(f"Overall sparsity = {overall_sparsity:.3f}")
     
     def reload(self):
         for n, m in self.model.named_modules():
             if isinstance(m, (QConvBNReLU, QConvReLU)):
-                if n in self.target_layers:
-                    m.conv.weight.data.copy_(self.new_weights[n])
+                if m.conv.groups == 1:
+                    m.conv.qweight.data.copy_(self.new_weights[n])
             
             elif isinstance(m, _QBaseLinear):
-                if n in self.target_layers:
-                    m.weight.data.copy_(self.new_weights[n])
+                m.qweight.data.copy_(self.new_weights[n])
         
         print("Reload completed!")
         return self.model
 
     def fit(self):
+        start = time.time()
         self.convert()
         model = self.reload()
+        total = time.time() - start
+        print(f"Total time of conversion = {total}s")
         return model

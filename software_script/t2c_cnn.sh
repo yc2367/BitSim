@@ -4,7 +4,7 @@ fi
 
 export CUDA_VISIBLE_DEVICES=0
 
-model=resnet50
+model=mobilenetv1
 epochs=200
 batch_size=128
 lr=0.1
@@ -15,14 +15,17 @@ log_file="training.log"
 wbit=8
 abit=8
 xqtype="lsq"
-wqtype="adaround"
+wqtype="minmax_channel"
 ttype=ptq
 
-save_path="/home/jm2787/BitSim/save/resnet18_torchvision/t2c/"
+save_path="/home/jm2787/BitSim/save/mobilenetv1/ptq/lsq_minmax_channel/mobilenetv1_w8_a8_lr1e-3_batch128_cross_entropyloss/t2c/"
+pre_trained="/home/jm2787/BitSim/save/mobilenetv1/ptq/lsq_minmax_channel/mobilenetv1_w8_a8_lr1e-3_batch128_cross_entropyloss/model_best.pth.tar"
 
-python3 -W ignore ./torchq.py \
+python3 -W ignore ./imagenet/t2c.py \
     --save_path ${save_path} \
     --model ${model} \
+    --resume ${pre_trained} \
+    --fine_tune \
     --wqtype ${wqtype} \
     --xqtype ${xqtype} \
     --wbit ${wbit} \
@@ -31,8 +34,8 @@ python3 -W ignore ./torchq.py \
     --train_dir "/share/seo/imagenet/train/" \
     --val_dir "/share/seo/imagenet/val/" \
     --evaluate \
-    --trainer ptq \
-    --flag 2 \
-    --grp_size 16 \
-    --N 2 \
-    --hamming_distance 0.5 \
+    --trainer qattn \
+    --swl 32 \
+    --sfl 26 \
+    --export_samples 8 \
+    

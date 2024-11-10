@@ -5,6 +5,43 @@ Basic Modules for Low precision and Sparsity
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from src.quantization.observer import BaseObserver
+
+class IntMatMul(nn.Module):
+    def __init__(self, nbit:int):
+        super().__init__()
+        self.nbit = nbit
+        self.register_buffer("x_shape", torch.tensor([1,1]))
+        self.register_buffer("y_shape", torch.tensor([1,1]))
+        self.register_buffer("z_shape", torch.tensor([1,1]))
+
+    def forward(self, x, y):
+        z = torch.matmul(x, y)
+        
+        self.x_shape.data = torch.tensor(list(x.size()))
+        self.y_shape.data = torch.tensor(list(y.size()))
+        self.z_shape.data = torch.tensor(list(z.size()))
+        return z
+    
+class ConvOPS(nn.Module):
+    def __init__(self, stride:int=1, padding:int=0, dilation:int=1, groups:int=1):
+        super().__init__()
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+
+        self.register_buffer("x_shape", torch.tensor([1,1]))
+        self.register_buffer("y_shape", torch.tensor([1,1]))
+        self.register_buffer("z_shape", torch.tensor([1,1]))
+
+    def forward(self, x:torch.Tensor, y:torch.Tensor, b:torch.Tensor):
+        z = F.conv2d(x, y, b, self.stride, self.padding, self.dilation, self.groups)
+        
+        self.x_shape.data = torch.tensor(list(x.size()))
+        self.y_shape.data = torch.tensor(list(y.size()))
+        self.z_shape.data = torch.tensor(list(z.size()))
+        return z
 
 class _QBase(nn.Module):
     r"""Base quantization method for weight and activation.
@@ -28,6 +65,18 @@ class _QBase(nn.Module):
         self.train_flag = True
         self.dequantize = True
 
+        # upper and lower bound
+        if not self.unsigned:
+            self.qlb = -2**(self.nbit-1)
+            self.qub = 2**(self.nbit-1) - 1
+        else:
+            self.qlb = 0
+            self.qub = 2**(self.nbit) - 1
+
+        self.register_qparams()
+        self.observer = BaseObserver(nbit=self.nbit)
+
+    def register_qparams(self):
         # register quantization scaler and zero point
         self.register_buffer("scale", torch.tensor(1.0))
         self.register_buffer("zero_point", torch.tensor(0.0))
@@ -102,19 +151,40 @@ class _QBaseConv2d(nn.Conv2d):
         Training / Evaluation Enable flag
         """
         self.train_flag = False
+        self.initialize_qweight = True
+
+        self.wq.inference()
+        self.aq.inference()
 
         # integer only weights copy
         self.register_buffer("qweight", torch.ones_like(self.weight))
 
-    def forward(self, x:torch.Tensor):
+        # update ops
+        self.ops = ConvOPS(self.stride, self.padding, self.dilation, groups=self.groups)
+
+    def trainFunc(self, x:torch.Tensor):
+        xq = self.aq(x)
         wq = self.wq(self.weight)
         
-        if not self.train_flag:
-            self.qweight.copy_(wq.data.mul(self.mask))
-        
-        xq = self.aq(x)
-
         y = F.conv2d(xq, wq.mul(self.mask), self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return y
+
+    def evalFunc(self, x:torch.Tensor):
+        xq = self.aq(x)
+        
+        if self.initialize_qweight:
+            wq = self.wq(self.weight)
+            self.qweight.copy_(wq.data.mul(self.mask))
+            self.initialize_qweight = False
+
+        y = self.ops(xq, self.qweight, self.bias)
+        return y
+
+    def forward(self, x:torch.Tensor):
+        if self.train_flag:
+            y = self.trainFunc(x)
+        else:
+            y = self.evalFunc(x)
 
         out = self.yq(y)
         return out
@@ -144,24 +214,50 @@ class _QBaseLinear(nn.Linear):
 
         # masks
         self.register_buffer("mask", torch.ones_like(self.weight))
+        self.initialize_qweight = True
     
     def inference(self):
         r"""
         Inference mode
         """
         self.train_flag = False
-        self.register_buffer("qweight", torch.ones_like(self.weight))
+        self.wq.inference()
+        self.aq.inference()
 
-    def forward(self, x:torch.Tensor):
+        self.register_buffer("qweight", torch.ones_like(self.weight))
+        self.ops = IntMatMul(nbit=self.abit)
+
+    def trainFunc(self, x:torch.Tensor):
         wq = self.wq(self.weight)
+        xq = self.aq(x)
         
-        if not self.train_flag:
+        y = F.linear(xq, wq.mul(self.mask), self.bias)
+        return y
+
+    def evalFunc(self, x:torch.Tensor):
+        wq = self.wq(self.weight)
+
+        if self.initialize_qweight:
+            wq = self.wq(self.weight)
             self.qweight.copy_(wq.data.mul(self.mask))
+            self.initialize_qweight = False
 
         xq = self.aq(x)
+        y = self.ops(xq, self.qweight.transpose(0,1))
 
-        y = F.linear(xq, wq.mul(self.mask), self.bias)
+        return y
 
-        yq = self.yq(y)
-        return yq
-
+    def forward(self, x:torch.Tensor):
+        if self.train_flag:
+            y = self.trainFunc(x)
+        else:
+            y = self.evalFunc(x)
+        
+        y = self.yq(y)
+        return y
+    
+def round_ste(x:torch.Tensor):
+    """
+    Quantization with STE
+    """
+    return (x.round() - x).detach() + x

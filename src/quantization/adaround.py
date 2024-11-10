@@ -10,7 +10,7 @@ class AdaRound(_QBase):
     Weight quantizer AdaRound: "Up or Down? Adaptive Rounding for Post-Training Quantization"
     https://arxiv.org/abs/2004.10568
     """
-    def __init__(self, nbit: int, train_flag: bool = True, weights: torch.Tensor=None, unsigned=True):
+    def __init__(self, nbit: int, train_flag: bool = True, weights: torch.Tensor=None, unsigned=False):
         super().__init__(nbit, train_flag, unsigned)
         self.iter = 0
 
@@ -18,8 +18,8 @@ class AdaRound(_QBase):
         self.register_buffer("ub", weights.max())
 
         # integer boundary
-        self.qlb = 0
-        self.qub = 2**self.nbit - 1
+        self.qlb = -2**(self.nbit-1)
+        self.qub = 2**(self.nbit-1)-1
 
         # initialize the alpha
         self.init_flag = True
@@ -53,7 +53,7 @@ class AdaRound(_QBase):
     def q(self, x:torch.Tensor):
         # scale = self.ub.sub(self.lb).div(self.qub - self.qlb)
         scale = (self.qub - self.qlb) / self.ub.sub(self.lb)
-        zero_point = self.qlb - torch.round(self.lb.mul(scale))
+        zero_point = torch.tensor(0.0)
 
         self.scale.copy_(scale)
         self.zero_point.copy_(zero_point)
@@ -67,7 +67,7 @@ class AdaRound(_QBase):
         soft_shift = self.h()
 
         # quantize
-        if self.train_flag:
+        if self.train_flag or self.training:
             xada = xfloor + soft_shift
         else:
             xada = xfloor + self.alpha.ge(0.0).float()
@@ -76,9 +76,6 @@ class AdaRound(_QBase):
         
         # integer representation
         output = torch.clamp(xq, self.qlb, self.qub).sub(self.zero_point)
-
-        # adaptive rounding could lead to overflow, need additional clamping
-        output = torch.clamp(output, -2**(self.nbit-1), 2**(self.nbit-1)-1)
 
         # dequantize
         if self.dequantize:

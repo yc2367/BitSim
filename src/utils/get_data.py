@@ -87,8 +87,12 @@ def get_ptq_dataloader(args):
         num_classes = 10
 
     elif args.dataset == 'imagenet':
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
+        if not "vit" in args.model:
+            mean = [0.485, 0.456, 0.406]
+            std = [0.229, 0.224, 0.225]
+        else:
+            mean = [0.5, 0.5, 0.5]
+            std = [0.5, 0.5, 0.5]
 
         train_transform = transforms.Compose([
             transforms.RandomResizedCrop(224),

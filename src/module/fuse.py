@@ -4,7 +4,6 @@ Post-computation scaling
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from src.module.base import _QBaseConv2d, _QBaseLinear
 
 class MulShift(nn.Module):
@@ -24,11 +23,7 @@ class MulShift(nn.Module):
         self.fl = 0.
 
     def forward(self, x:torch.Tensor):
-        if len(self.scale.size()) > 0:
-            out = x.mul(self.scale[None, :, None, None]).add(self.bias[None, :, None, None])
-        else:
-            out = x.mul(self.scale).add(self.bias)
-
+        out = x.mul(self.scale).add(self.bias)
         out = out.mul(2**(-self.fl))
         return out
 
@@ -62,27 +57,14 @@ class MulQuant(nn.Module):
 
     def forward(self, x:torch.Tensor):
         # scale
-        if len(self.scale.size()) > 0:
-            out = x.mul(self.scale[None, :, None, None])
-        else:
-            out = x.mul(self.scale)
-        
-        # bias
-        if len(self.bias.size()) > 0:
-            out = out.add(self.bias)
-        else:
-            out = out.add(self.bias)
-
-        # fused ReLU (clipp negative values)
-        if self.unsigned:
-            out = F.relu(out)
-        out = out.mul(2**(-self.fl)).round()
+        out = x.mul(self.scale)
+        out = out.add(self.bias).mul(2**(-self.fl)).round()
         
         # quant
-        out = out.round()
+        out = out.add(self.zp)
         out = out.clamp(min=self.qlb, max=self.qub).sub(self.zp)
         
-        return out
+        return out.clamp(min=self.qlb, max=self.qub)
 
 class QConvBNReLU(nn.Module):
     r"""
@@ -94,20 +76,26 @@ class QConvBNReLU(nn.Module):
         
         # modules
         self.conv = _QBaseConv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, wbit, abit, train_flag)
-        self.bn = nn.BatchNorm2d(out_channels)
+        # self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.Identity()
 
-        # scaler and shifter
-        if int_out:
-            self.scaler = MulQuant(nbit=abit)
-        else:
-            self.scaler = MulShift()
-    
+        # flag
+        self.int_out = int_out
+        self.scale = torch.tensor(1.0)
+
+        # precision
+        self.abit = abit
+        
+        # scaler
+        self.scaler = MulShift()
+
+    def quant(self, x:torch.Tensor):
+        x = x.mul(self.scale).round().clamp(0, 2**self.abit-1)
+        return x.div(self.scale)
+
     def forward(self, inputs:torch.Tensor) -> torch.Tensor:
         x = self.conv(inputs)
         x = self.scaler(x)
-        x = self.bn(x)
-
         x = self.relu(x)
         return x
 
@@ -167,12 +155,11 @@ class FusedLinear(nn.Module):
         if int_out:
             self.scaler = MulQuant(nbit=abit, unsigned=False)
         else:
-            self.deq = MulShift()
+            self.scaler = MulShift()
 
     def forward(self, inputs:torch.Tensor) -> torch.Tensor:
         x = self.linear(inputs)
         x = self.scaler(x)
-        x = self.deq(x)
         return x
     
 class LinearMulShift(nn.Module):

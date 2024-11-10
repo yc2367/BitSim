@@ -10,7 +10,7 @@ def bitflip_signMagnitude_conv(wq_int, w_bitwidth: int=8, group_size: int=16, nu
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -135,7 +135,7 @@ def bitflip_twosComplement_conv(wq_int, w_bitwidth: int=8, group_size: int=16, n
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     wqb_twosComplement = int_to_twosComplement(wq_int, w_bitwidth=w_bitwidth, device=device)
 
@@ -210,7 +210,7 @@ def bitflip_zeroPoint_conv(wq_int, w_bitwidth: int=8, group_size: int=16,
         group_size = C
     NUM_GROUP = K*W*H*C//group_size
     wq_int = wq_int.permute([0, 2, 3, 1]).unsqueeze(-1)
-    wq_int = wq_int.view(NUM_GROUP, group_size)
+    wq_int = wq_int.reshape(NUM_GROUP, group_size)
 
     # clipping threshold
     v_max = 2.**(w_bitwidth-1) - 1
@@ -309,6 +309,7 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
     wq_int_rp[wq_int_rp.gt(v_max)] = v_max
 
     wqb_signMagnitude = int_to_signMagnitude(wq_int_rp, w_bitwidth=w_bitwidth, device=device)
+    print(f"Total allocated memory = {torch.cuda.memory_allocated(0)/1e+9:.3f}GB")
 
     # prune_until is a pointer to specify which column to prune until
     # E.g., for 8-bit weight -> column_idx = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -334,7 +335,7 @@ def bitflip_zeroPoint_fc(wq_int, w_bitwidth: int=8, group_size: int=16,
         column_test = wqb_signMagnitude[test_idx:, mask, :]
         int_test = binary_to_int(column_test, w_bitwidth=w_bitwidth-test_idx, device=device)
         value_test[mask] = int_test
-
+    print(f"Total allocated memory = {torch.cuda.memory_allocated(0)/1e+9:.3f}GB")
     for prune_idx in range(w_bitwidth-num_pruned_column, w_bitwidth):
         for test_idx in range(1, prune_idx):
             mask_group = torch.logical_and(torch.eq(test_until, test_idx), torch.eq(prune_until, prune_idx))
