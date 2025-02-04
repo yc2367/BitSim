@@ -21,7 +21,6 @@ class Sparten(Accelerator):
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
                  model_name: str,
-                 model: nn.Module, # model comes from "BitSim/sim.model_profile/models/models.py
                  args):
         assert len(pe_array_dim) == 2, \
             f'PE array must have 2 dimensions, but you gave {len(pe_array_dim)}'
@@ -30,11 +29,11 @@ class Sparten(Accelerator):
         (self.i_num_zero, 
          self.o_num_zero, 
          self.w_num_zero, 
-         self.num_eff_ops) = self._get_sparse_info(model_name, model, pe_dotprod_size, args)
+         self.num_eff_ops) = self._get_sparse_info(model_name, pe_dotprod_size, args)
         
         pe = PE([input_precision, input_precision], 
                 pe_dotprod_size, self.PE_ENERGY, self.PE_AREA)
-        super().__init__(pe, pe_array_dim, model_name, model)
+        super().__init__(pe, pe_array_dim, model_name)
         self._calc_eff_ops()
 
         self._init_mem()
@@ -141,7 +140,7 @@ class Sparten(Accelerator):
 
         # batch size, output channel, num_groups
         token_num, cout, num_groups = num_eff_ops.shape
-        
+
         iter_cout  = math.ceil(cout / num_pe_row)
         iter_sample = math.ceil(token_num / num_pe_col)
         for ti_sample in range(iter_sample):
@@ -234,7 +233,7 @@ class Sparten(Accelerator):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
     
     def _calc_tile_dwconv(self, w_dim, i_dim, o_dim):
@@ -260,7 +259,7 @@ class Sparten(Accelerator):
         tile_oh     = oh
 
         tile_per_batch = (tile_kernel * tile_cout * tile_ow * tile_oh)
-        total_tile = tile_per_batch * batch_size
+        total_tile = tile_per_batch 
         return total_tile
 
     def _calc_tile_fc(self, w_dim, o_dim):
@@ -277,7 +276,7 @@ class Sparten(Accelerator):
         # tile_cout:  number of tiles along output channel
         tile_in_channel  = math.ceil(cin / pe_group_size)
         tile_cout        = math.ceil(cout / num_pe_row)
-        tile_batch       = math.ceil(batch_size * token_num / num_pe_col)
+        tile_batch       = math.ceil(token_num / num_pe_col)
 
         total_tile = (tile_in_channel * tile_cout * tile_batch)
         return total_tile
@@ -388,10 +387,10 @@ class Sparten(Accelerator):
         num_w_sram_wr = math.ceil(cw * w_prec / w_sram_min_wr_bw) * (k**2) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw * batch_size
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * ih * iw 
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow * batch_size
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * oh * ow 
         energy_o_sram_wr = num_o_sram_wr * o_density * i_sram_wr_cost
 
         total_energy = energy_w_sram_wr + energy_i_sram_wr + energy_o_sram_wr
@@ -417,10 +416,10 @@ class Sparten(Accelerator):
         num_w_sram_wr = math.ceil(cin * w_prec / w_sram_min_wr_bw) * cout
         energy_w_sram_wr = num_w_sram_wr * w_sram_wr_cost * w_density * num_fetch_w
 
-        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_i_sram_wr  = math.ceil(cin * i_prec / i_sram_min_wr_bw)  * token_num
         energy_i_sram_wr = num_i_sram_wr * i_sram_wr_cost * i_density * num_fetch_i
 
-        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw) * batch_size * token_num
+        num_o_sram_wr  = math.ceil(cout * i_prec / i_sram_min_wr_bw)  * token_num
         if token_num == 1: # CNN last FC layer
             energy_o_sram_wr = 0
         else:
@@ -510,8 +509,8 @@ class Sparten(Accelerator):
         total_energy = energy_weight + energy_input + energy_output
         return total_energy
     
-    def _get_sparse_info(self, model_name, model, group_size, args):
-        zero_ops_profiler = SpartenProfiler(model_name, model, group_size, args=args, device=self.DEVICE)
+    def _get_sparse_info(self, model_name, group_size, args):
+        zero_ops_profiler = SpartenProfiler(model_name, group_size, args=args, device=self.DEVICE)
         zero_ops_profiler.fit()
         return (zero_ops_profiler.num_zero_input, 
                 zero_ops_profiler.num_zero_output, 
@@ -553,8 +552,8 @@ class Sparten(Accelerator):
                     _, oh ,ow, _ = o_dim
 
                     w_mem_dense = math.ceil(cw * w_prec / 8) * k**2 * cout
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw * batch_size
-                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow * batch_size
+                    i_mem_dense = math.ceil(cin * i_prec / 8) * ih * iw 
+                    o_mem_dense = math.ceil(cout * i_prec / 8) * oh * ow 
                     self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
@@ -565,11 +564,11 @@ class Sparten(Accelerator):
                     batch_size, token_num, _ = o_dim
 
                     w_mem_dense = math.ceil(cin * w_prec / 8) * cout
-                    i_mem_dense = math.ceil(cin * i_prec / 8) * batch_size * token_num
+                    i_mem_dense = math.ceil(cin * i_prec / 8)  * token_num
                     if layer_idx == (len(self.layer_name_list) - 1):
                         o_mem_dense = 0
                     else:
-                        o_mem_dense = math.ceil(cout * i_prec / 8) * batch_size * token_num
+                        o_mem_dense = math.ceil(cout * i_prec / 8)  * token_num
                     self._w_mem_required[name] = math.ceil(w_mem_dense * w_density / 8) * 8
                     self._i_mem_required[name] = math.ceil(i_mem_dense * i_density * i_mem_scaling / 8) * 8
                     self._o_mem_required[name] = math.ceil(o_mem_dense * o_density * o_mem_scaling / 8) * 8
@@ -593,13 +592,16 @@ class Sparten(Accelerator):
                     total_fetch_input  = num_refetch_input * i_mem_required
                     #print('Need DRAM refetch ...')
                     #print(f'w_dim: {w_dim}, i_dim: {i_dim}')
-                    if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
-                        #print(f'Refetch weight for {num_refetch_weight} times ...')
-                        # refetch all weight for every input tile
-                        self._layer_mem_refetch[name] = (num_refetch_weight, 1)
+                    if self.model_name in ['vgg16', 'resnet34', 'resnet50']:
+                        if ( total_fetch_weight + i_mem_required ) < ( total_fetch_input + w_mem_required ):
+                            #print(f'Refetch weight for {num_refetch_weight} times ...')
+                            # refetch all weight for every input tile
+                            self._layer_mem_refetch[name] = (num_refetch_weight, 1)
+                        else:
+                            #print(f'Refetch input for {num_refetch_input} times ...')
+                            # refetch all input for every weight tile
+                            self._layer_mem_refetch[name] = (1, num_refetch_input)
                     else:
-                        #print(f'Refetch input for {num_refetch_input} times ...')
-                        # refetch all input for every weight tile
                         self._layer_mem_refetch[name] = (1, num_refetch_input)
                 else:
                     # no need refetch

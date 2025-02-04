@@ -4,8 +4,7 @@ import torch.nn as nn
 
 from typing import List
 from sim.stripes import Stripes
-from sim.util.model_quantized import MODEL
-from sim.util.bin_int_convert import int_to_signMagnitude
+from sim.util.bin_int_convert import int_to_signMagnitude, int_to_twosComplement
 
 # Pragmatic accelerator
 class Pragmatic(Stripes):
@@ -25,11 +24,10 @@ class Pragmatic(Stripes):
                  input_precision_p: int, # bit-parallel operand precision
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
-                 model_name: str,
-                 model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
-        self.model_q = MODEL[model_name].cpu() # quantized model
+                 model_name: str):
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)    
+                         pe_array_dim, model_name)    
+        self.model_q = self._get_quantized_model() # quantized model
 
     def calc_cycle(self):
         self._calc_compute_cycle()
@@ -45,9 +43,12 @@ class Pragmatic(Stripes):
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
-        self._layer_cycle_compute = {}
+        self.min_intra_pe_op = 0 # The min number of bit ops in a weight group
+        self.max_intra_pe_op = 0 # The max number of bit ops in a weight group that contains the min_intra_pe_op
         self.num_eff_op = 0
         self.num_total_op = 0
+
+        self._layer_cycle_compute = {}
         for name in self.layer_name_list:
             cycle_layer_compute = 0
             w_dim = self.weight_dim[name]
@@ -72,7 +73,6 @@ class Pragmatic(Stripes):
     def _calc_cycle_conv2d(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[:, :, :, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
@@ -89,6 +89,8 @@ class Pragmatic(Stripes):
         cycle_kernel = 0
         num_eff_op_kernel = 0
         num_total_op_kernel = 0
+        min_intra_pe_op_kernel = 0
+        max_intra_pe_op_kernel = 0
 
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
@@ -107,9 +109,12 @@ class Pragmatic(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=0)).item()
+                        num_eff_bit_per_word = torch.sum(tile_k, dim=0)
+                        cycle_tile_k = torch.max(num_eff_bit_per_word).item()
                         cycle_kernel += int(cycle_tile_k)
 
+                        min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
+                        max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
                         num_eff_op_kernel += torch.sum(tile_k).item()
                         num_total_op_kernel += (cycle_tile_k * pe_group_size * num_pe_row)
             else:
@@ -122,26 +127,32 @@ class Pragmatic(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=0)).item()
+                            num_eff_bit_per_word = torch.sum(tile_cw, dim=0)
+                            cycle_tile_cw = torch.max(num_eff_bit_per_word).item()
                             cycle_kernel += int(cycle_tile_cw)
 
+                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
+                            max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
                             num_eff_op_kernel += torch.sum(tile_cw).item()
                             num_total_op_kernel += (cycle_tile_cw * pe_group_size * num_pe_row)
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
 
-        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
-        num_total_op = num_total_op_kernel  * cycle_ow * cycle_oh * batch_size
+        min_intra_pe_op = min_intra_pe_op_kernel * cycle_ow * cycle_oh 
+        max_intra_pe_op = max_intra_pe_op_kernel * cycle_ow * cycle_oh 
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh 
         self.num_eff_op += num_eff_op
         self.num_total_op += num_total_op
+        self.min_intra_pe_op += min_intra_pe_op
+        self.max_intra_pe_op += max_intra_pe_op
         return total_cycle
     
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[:, :, :, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_col = self.pe_array_dim['w']
@@ -184,10 +195,10 @@ class Pragmatic(Stripes):
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
 
-        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh * batch_size
-        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh * batch_size
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh 
         self.num_eff_op += num_eff_op
         self.num_total_op += num_total_op
         return total_cycle
@@ -195,7 +206,6 @@ class Pragmatic(Stripes):
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        wq_b = wq_b[:, :, :]
 
         pe_group_size = self.pe_dotprod_size
         num_pe_row = self.pe_array_dim['h']
@@ -212,6 +222,8 @@ class Pragmatic(Stripes):
         cycle_kernel = 0
         num_eff_op_kernel = 0
         num_total_op_kernel = 0
+        min_intra_pe_op_kernel = 0
+        max_intra_pe_op_kernel = 0
 
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
@@ -225,29 +237,34 @@ class Pragmatic(Stripes):
                 l_ti_cin = ti_cin * pe_group_size
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
-                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=0)).item()
+                num_eff_bit_per_word = torch.sum(tile_cin, dim=0)
+                cycle_tile_cin = torch.max(num_eff_bit_per_word).item()
                 cycle_kernel += int(cycle_tile_cin)
 
-                num_eff_op_kernel += torch.sum(tile_cin).item()
-                num_total_op_kernel += (cycle_tile_cin * pe_group_size)
-        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
+                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
+                max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
+                num_eff_op_kernel += torch.sum(tile_cin).item() 
+                num_total_op_kernel += (cycle_tile_cin * pe_group_size * num_pe_row)
+        cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
 
+        min_intra_pe_op = min_intra_pe_op_kernel * cycle_batch
+        max_intra_pe_op = max_intra_pe_op_kernel * cycle_batch
         num_eff_op = num_eff_op_kernel * cycle_batch
         num_total_op = num_total_op_kernel * cycle_batch
         self.num_eff_op += num_eff_op
         self.num_total_op += num_total_op
+        self.min_intra_pe_op += min_intra_pe_op
+        self.max_intra_pe_op += max_intra_pe_op
         return total_cycle
     
     def _get_quantized_weight(self, layer_name):
-        for name, layer in self.model_q.named_modules():
+        for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                w = layer.weight()
-                wq = torch.int_repr(w)
-                wqb_twosComplement = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
-                if len(wqb_twosComplement.shape) == 5:
-                    wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])
-                return wqb_twosComplement
+                wqb_signMagnitude = int_to_signMagnitude(wq, w_bitwidth=8, device=self.DEVICE)
+                if len(wqb_signMagnitude.shape) == 5:
+                    wqb_signMagnitude = wqb_signMagnitude.permute([0, 1, 3, 4, 2])
+                return wqb_signMagnitude
         raise Exception(f'ERROR! The layer {layer_name} cannot be found in the quantized model!')
         
     def calc_compute_energy(self):

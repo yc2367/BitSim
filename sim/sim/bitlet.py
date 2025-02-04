@@ -7,7 +7,6 @@ from typing import List
 
 from hw.mem.mem_instance import MemoryInstance
 from sim.stripes import Stripes
-from sim.util.model_quantized import MODEL
 from sim.util.bin_int_convert import int_to_twosComplement
 
 # Bitlet accelerator
@@ -26,12 +25,11 @@ class Bitlet(Stripes):
                  input_precision_p: int, # bit-parallel operand precision
                  pe_dotprod_size: int, # length of the dot product inside one PE
                  pe_array_dim: List[int],
-                 model_name: str,
-                 model: nn.Module): # model comes from "BitSim/sim.model_profile/models/models.py
-        self.model_q = MODEL[model_name].cpu() # quantized model
+                 model_name: str): 
         super().__init__(input_precision_s, input_precision_p, pe_dotprod_size, 
-                         pe_array_dim, model_name, model)
-    
+                         pe_array_dim, model_name)
+        self.model_q = self._get_quantized_model() # quantized model
+
     def calc_cycle(self):
         self._calc_compute_cycle()
         self._calc_dram_cycle()
@@ -46,6 +44,10 @@ class Bitlet(Stripes):
         return total_cycle_compute, total_cycle
     
     def _calc_compute_cycle(self):
+        self.min_intra_pe_op = 0 # The min number of bit ops in a weight group
+        self.max_intra_pe_op = 0 # The max number of bit ops in a weight group that contains the min_intra_pe_op
+        self.num_eff_op = 0
+        self.num_total_op = 0
         self._layer_cycle_compute = {}
         for name in self.layer_name_list:
             cycle_layer_compute = 0
@@ -85,6 +87,11 @@ class Bitlet(Stripes):
         # cycle_ow:     number of cycles along output width
         # cycle_oh:     number of cycles along output height
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+        min_intra_pe_op_kernel = 0
+        max_intra_pe_op_kernel = 0
+
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
             l_ti_cout = ti_cout * num_pe_row
@@ -102,8 +109,15 @@ class Bitlet(Stripes):
                         l_ti_k = ti_k * pe_group_size
                         u_ti_k = (ti_k+1) * pe_group_size
                         tile_k = tile_cw[:, :, l_ti_k:u_ti_k]
-                        cycle_tile_k = torch.max(torch.sum(tile_k, dim=-1))
-                        cycle_kernel += int(cycle_tile_k.item())
+                        
+                        num_eff_bit_per_lane = torch.sum(tile_k, dim=-1)
+                        cycle_tile_k = torch.max(num_eff_bit_per_lane).item()
+                        cycle_kernel += int(cycle_tile_k)
+
+                        min_intra_pe_op_kernel += torch.min(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                        max_intra_pe_op_kernel += torch.max(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                        num_eff_op_kernel += torch.sum(tile_k).item()
+                        num_total_op_kernel += (cycle_tile_k * self.pe.input_precision_p * num_pe_row)
             else:
                 for tk1 in range(k):
                     for tk2 in range(k):
@@ -114,13 +128,28 @@ class Bitlet(Stripes):
                             l_ti_cw = ti_cw * pe_group_size
                             u_ti_cw = (ti_cw+1) * pe_group_size
                             tile_cw = tile_k[:, :, l_ti_cw:u_ti_cw]
-                            cycle_tile_cw = torch.max(torch.sum(tile_cw, dim=-1))
-                            cycle_kernel += int(cycle_tile_cw.item())
+
+                            num_eff_bit_per_lane = torch.sum(tile_cw, dim=-1)
+                            cycle_tile_cw = torch.max(num_eff_bit_per_lane).item()
+                            cycle_kernel += int(cycle_tile_cw)
+
+                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                            max_intra_pe_op_kernel += torch.max(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                            num_eff_op_kernel += torch.sum(tile_cw).item()
+                            num_total_op_kernel += (cycle_tile_cw * self.pe.input_precision_p * num_pe_row)
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
-
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
+
+        min_intra_pe_op = min_intra_pe_op_kernel * cycle_ow * cycle_oh 
+        max_intra_pe_op = max_intra_pe_op_kernel * cycle_ow * cycle_oh 
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh 
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
+        self.min_intra_pe_op += min_intra_pe_op
+        self.max_intra_pe_op += max_intra_pe_op
         return total_cycle
     
     def _calc_cycle_dwconv(self, layer_name, w_dim, i_dim, o_dim):
@@ -143,6 +172,9 @@ class Bitlet(Stripes):
         # cycle_ow:     number of cycles along output width
         # cycle_oh:     number of cycles along output height
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+
         iter_cout  = math.ceil(cout)
         for ti_cout in range(iter_cout):
             # get the tile along output channel: [bit_significance, tile_cout, k, k, cw]
@@ -157,14 +189,20 @@ class Bitlet(Stripes):
                     l_ti_k = ti_k * pe_group_size
                     u_ti_k = (ti_k+1) * pe_group_size
                     tile_k = tile_cw[:, l_ti_k:u_ti_k]
-
                     cycle_tile_k = torch.max(torch.sum(tile_k, dim=-1))
                     cycle_kernel += int(cycle_tile_k.item())
+
+                    num_eff_op_kernel += torch.sum(tile_k).item()
+                    num_total_op_kernel += (cycle_tile_k * self.pe.input_precision_p)
         cycle_ow = math.ceil(ow / num_pe_col)
         cycle_oh = oh
-
         cycle_per_batch = (cycle_kernel * cycle_ow * cycle_oh)
-        total_cycle = cycle_per_batch * batch_size
+        total_cycle = cycle_per_batch 
+
+        num_eff_op = num_eff_op_kernel * cycle_ow * cycle_oh 
+        num_total_op = num_total_op_kernel * cycle_ow * cycle_oh 
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
         return total_cycle
 
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim):
@@ -181,9 +219,14 @@ class Bitlet(Stripes):
         batch_size, token_num, _ = o_dim
 
         # cycle_kernel: number of cycles to process a kernel
-        # cycle_ow:     number of cycles along output width
-        # cycle_oh:     number of cycles along output height
+        # num_eff_op:   number of effective operations performed
+        # num_total_op: number of total operations performed
         cycle_kernel = 0
+        num_eff_op_kernel = 0
+        num_total_op_kernel = 0
+        min_intra_pe_op_kernel = 0
+        max_intra_pe_op_kernel = 0
+
         iter_cout  = math.ceil(cout / num_pe_row)
         for ti_cout in range(iter_cout):
             l_ti_cout = ti_cout * num_pe_row
@@ -197,17 +240,31 @@ class Bitlet(Stripes):
                 u_ti_cin = (ti_cin+1) * pe_group_size
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
 
-                cycle_tile_cin = torch.max(torch.sum(tile_cin, dim=-1))
-                cycle_kernel += int(cycle_tile_cin.item())
-        cycle_batch = math.ceil(batch_size * token_num / num_pe_col)
+                num_eff_bit_per_lane = torch.sum(tile_cin, dim=-1)
+                cycle_tile_cin = torch.max(num_eff_bit_per_lane).item()
+                cycle_kernel += int(cycle_tile_cin)
+
+                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                max_intra_pe_op_kernel += torch.max(num_eff_bit_per_lane, dim=0).values.sum().item() * self.pe.input_precision_p
+                num_eff_op_kernel += torch.sum(tile_cin).item()
+                num_total_op_kernel += (cycle_tile_cin * self.pe.input_precision_p * num_pe_row)
+
+        cycle_batch = math.ceil(token_num / num_pe_col)
         total_cycle = cycle_kernel * cycle_batch
+
+        min_intra_pe_op = min_intra_pe_op_kernel * cycle_batch
+        max_intra_pe_op = max_intra_pe_op_kernel * cycle_batch
+        num_eff_op = num_eff_op_kernel * cycle_batch
+        num_total_op = num_total_op_kernel * cycle_batch
+        self.num_eff_op += num_eff_op
+        self.num_total_op += num_total_op
+        self.min_intra_pe_op += min_intra_pe_op
+        self.max_intra_pe_op += max_intra_pe_op
         return total_cycle
     
     def _get_quantized_weight(self, layer_name):
-        for name, layer in self.model_q.named_modules():
+        for name, wq in self.model_q.items():
             if ( layer_name == name ):
-                w = layer.weight()
-                wq = torch.int_repr(w)
                 wqb_twosComplement = int_to_twosComplement(wq, w_bitwidth=8, device=self.DEVICE)
                 if len(wqb_twosComplement.shape) == 5:
                     wqb_twosComplement = wqb_twosComplement.permute([0, 1, 3, 4, 2])

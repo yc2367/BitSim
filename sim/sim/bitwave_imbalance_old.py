@@ -155,11 +155,14 @@ class Bitwave(Stripes):
 
                         if self.en_bitflip:
                             cycle_tile_k = self._count_zero_bit_column(tile_k)
-                            num_eff_bit_per_word = torch.sum(tile_k, dim=0)
-                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
-                            max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
+
+                            mask = torch.all(tile_k.logical_not(), dim=-1)
+                            tile_k[mask] = 1
+                            num_eff_bit_per_word = torch.sum(tile_k, dim=-1)
+                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
+                            max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
                             num_eff_op_kernel += torch.sum(tile_k + num_skipped_col / self.pe.input_precision_p).item()
-                            num_total_op_kernel += ((cycle_tile_k + num_skipped_col) * pe_group_size * num_pe_row)
+                            num_total_op_kernel += (8 * pe_group_size * num_pe_row)
                         else:
                             cycle_tile_k = self.w_prec_config[layer_name] - 1
 
@@ -177,11 +180,14 @@ class Bitwave(Stripes):
 
                             if self.en_bitflip:
                                 cycle_tile_cw = self._count_zero_bit_column(tile_cw)
-                                num_eff_bit_per_word = torch.sum(tile_cw, dim=0)
-                                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
-                                max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
+
+                                mask = torch.all(tile_cw.logical_not(), dim=-1)
+                                tile_cw[mask] = 1
+                                num_eff_bit_per_word = torch.sum(tile_cw, dim=-1)
+                                min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
+                                max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
                                 num_eff_op_kernel += torch.sum(tile_cw + num_skipped_col / self.pe.input_precision_p).item()
-                                num_total_op_kernel += ((cycle_tile_cw + num_skipped_col) * pe_group_size * num_pe_row)
+                                num_total_op_kernel += (8 * pe_group_size * num_pe_row)
                             else:
                                 cycle_tile_cw = self.w_prec_config[layer_name] - 1
 
@@ -254,7 +260,7 @@ class Bitwave(Stripes):
     def _calc_cycle_fc(self, layer_name, w_dim, o_dim, dataflow):
         # wq_b dimension: [bit_significance, cout, k, k, cw]
         wq_b = self._get_quantized_weight(layer_name) # [bit_significance]
-        num_skipped_col = 8 - self.pe.input_precision_s + 1
+        num_skipped_col = 8 - self.pe.input_precision_s
 
         pe_group_size = dataflow[0]
         num_pe_row = dataflow[1]
@@ -290,11 +296,14 @@ class Bitwave(Stripes):
                 tile_cin = tile_cout[:, :, l_ti_cin:u_ti_cin]
                 if self.en_bitflip:
                     cycle_tile_cin = self._count_zero_bit_column(tile_cin)
-                    num_eff_bit_per_word = torch.sum(tile_cin, dim=0)
-                    min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
-                    max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word + num_skipped_col, dim=-1).values.sum().item() * pe_group_size
+                    
+                    mask = torch.all(tile_cin.logical_not(), dim=-1)
+                    tile_cin[mask] = 1
+                    num_eff_bit_per_word = torch.sum(tile_cin, dim=-1)
+                    min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
+                    max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * num_pe_row
                     num_eff_op_kernel += torch.sum(tile_cin + num_skipped_col / self.pe.input_precision_p).item()
-                    num_total_op_kernel += ((cycle_tile_cin + num_skipped_col) * pe_group_size * num_pe_row)
+                    num_total_op_kernel += (8 * pe_group_size * num_pe_row)
                 else:
                     cycle_tile_cin = self.w_prec_config[layer_name] - 1
                 cycle_kernel += int(cycle_tile_cin)

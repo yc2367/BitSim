@@ -157,6 +157,7 @@ class SpartenProfiler(Profiler):
         # kernel
         k = layer.kernel_size[0]
         cin = layer.in_channels // layer.groups
+        print(layer.padding, layer.stride)
 
         # count number of zero operations for every group
         num_groups = math.ceil(k**2 * cin / group_size) 
