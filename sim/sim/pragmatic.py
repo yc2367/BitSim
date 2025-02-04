@@ -113,7 +113,7 @@ class Pragmatic(Stripes):
                         cycle_tile_k = torch.max(num_eff_bit_per_word).item()
                         cycle_kernel += int(cycle_tile_k)
 
-                        min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
+                        min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
                         max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
                         num_eff_op_kernel += torch.sum(tile_k).item()
                         num_total_op_kernel += (cycle_tile_k * pe_group_size * num_pe_row)
@@ -131,7 +131,7 @@ class Pragmatic(Stripes):
                             cycle_tile_cw = torch.max(num_eff_bit_per_word).item()
                             cycle_kernel += int(cycle_tile_cw)
 
-                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
+                            min_intra_pe_op_kernel += torch.min(num_eff_bit_per_word + 1, dim=-1).values.sum().item() * pe_group_size
                             max_intra_pe_op_kernel += torch.max(num_eff_bit_per_word, dim=-1).values.sum().item() * pe_group_size
                             num_eff_op_kernel += torch.sum(tile_cw).item()
                             num_total_op_kernel += (cycle_tile_cw * pe_group_size * num_pe_row)

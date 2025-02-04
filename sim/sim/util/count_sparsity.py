@@ -109,12 +109,17 @@ def count_less_bit_2sComplement(wq_b, w_bitwidth=8, group_size=16, num_pruned_co
         eq_column = torch.all(torch.eq(wb[0], wb[i]), dim=-1)
         eq_msb_column = torch.logical_and(eq_msb_column, eq_column)
         wb[i, eq_msb_column, :] = 0
-
+    
+    is_redun_col = torch.logical_or(torch.all(wb.logical_not(), dim=-1), torch.all(wb, dim=-1))
+    num_redun_col_per_group = torch.sum(is_redun_col, dim=0)
+    has_more_redun_col = num_redun_col_per_group.gt(num_pruned_column)
+    redun_load = torch.sum(num_redun_col_per_group[has_more_redun_col] - num_pruned_column)
+    #print(redun_load)
     bit_one_count = torch.sum(wb, dim=-1)
     mask_skip = bit_one_count.lt(group_size/2)
     wb[mask_skip] = 1 - wb[mask_skip]
 
-    return wb
+    return wb, redun_load
 
 
 def count_less_bit_clip_msb_conv(wq_int, w_bitwidth=8, group_size=16, device='cpu'):

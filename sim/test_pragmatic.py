@@ -1,13 +1,13 @@
 from sim.pragmatic import Pragmatic 
 
 name_list = ['vgg16', 'resnet34', 'resnet50', 'vit-small', 'vit-base', 'bert-mrpc', 'bert-sst2']
-name_list = ['bert-sst2']
+name_list = ['bert-mrpc']
 name_list = ['resnet50']
 
 
 if __name__ == "__main__":
     for name in name_list:
-        acc = Pragmatic(8, 8, 8, [2, 16], name)
+        acc = Pragmatic(8, 8, 8, [32, 16], name)
         
         total_cycle    = acc.calc_cycle()
         compute_energy = acc.calc_compute_energy() / 1e6

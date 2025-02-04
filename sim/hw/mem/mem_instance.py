@@ -1,4 +1,4 @@
-from hw.mem.cacti_simulation import CactiSimulation
+from cacti_simulation import CactiSimulation
 from typing import Dict
 
 ## Description missing
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     if func == 'dram':
         mem_config = {'technology': 0.028,
                     'mem_type': 'dram', 
-                    'size': 10000000000, 
+                    'size': 1000000000, 
                     'bank_count': 1, 
                     'rw_bw': 64, 
                     'r_port': 0, 

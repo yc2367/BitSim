@@ -79,9 +79,9 @@ class BitVert(Stripes):
             layer_param = np.prod(self.weight_dim[name])
             total_bit += (layer_param * self.pe.input_precision_p) 
             eff_bit += (layer_param * self.w_prec_eff[name])
-        print(f'eff bits:      {eff_bit}')
-        print(f'total bits:    {total_bit}')
-        print(f'eff precision: {eff_bit / total_bit * self.pe.input_precision_p}')
+        print(f'eff bits:       {eff_bit}')
+        print(f'total bits:     {total_bit}')
+        print(f'eff precision:  {eff_bit / total_bit * self.pe.input_precision_p}')
 
     def _calc_w_prec_config(self):
         w_prec_config = {}

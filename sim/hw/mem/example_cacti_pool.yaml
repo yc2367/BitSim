@@ -1,16 +1,16 @@
-16384.0_Byte_128.0_BW_1_1_0:
+131072.0_Byte_128.0_BW_1_1_0:
   IO_bus_width: 128
-  area: 0.0461889
+  area: 0.420595
   bank_count: 1
   cost:
-    read_word: 0.00608131
-    write_word: 0.011671
+    read_word: 0.0260059
+    write_word: 0.0236456
   ex_rd_port: 1
   ex_wr_port: 1
-  latency: 0.312608
+  latency: 0.703654
   memory_type: sram
   rd_wr_port: 0
-  size_bit: 131072
-  size_byte: 16384
+  size_bit: 1048576
+  size_byte: 131072
   technology: 0.028
 
